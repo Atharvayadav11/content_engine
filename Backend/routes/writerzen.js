@@ -283,8 +283,8 @@ router.get("/keywords", auth, async (req, res) => {
 
 router.post("/keywords-to-include", auth, async (req, res) => {
   try {
-    // const { keyword } = req.body
-    const keyword = "cold email strategy" // For testing purposes, you can remove this line later;
+     const { keyword } = req.body
+   // const keyword = "cold email strategy" // For testing purposes, you can remove this line later;
 
     if (!keyword) {
       return res.status(400).json({ message: "Keyword is required" })
