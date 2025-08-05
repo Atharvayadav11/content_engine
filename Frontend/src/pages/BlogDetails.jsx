@@ -815,7 +815,7 @@ const BlogDetails = () => {
               <div className="space-y-2">
                 {blog.urls.map((url, index) => (
                   <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                    <span className="font-medium">{url.title}</span>
+                    <span className="font-medium">{url.url}</span>
                     <div className="flex items-center space-x-2">
                       <a
                         href={url.url}
