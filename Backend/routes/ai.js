@@ -20,12 +20,12 @@ router.post("/extract-toc", auth, async (req, res) => {
 
     console.log("📋 Extracting TOC from URLs using Claude AI:", urls.length)
 
-    const prompt = `I have ${urls.length} blog post URLs. Your task is to extract the Table of Contents (TOC) from the first URL that contains it in a clearly structured way.
+    const prompt = `Please use the web_fetch tool to access the URL and extract the table of contents I have ${urls.length} blog post URLs. Your task is to extract the Table of Contents (TOC) from the first URL that contains it in a clearly structured way.
 
 Check each URL in the given order: 1st, then 2nd, then 3rd.
 If you find a clear TOC in the first URL, return it and stop, without checking the others.
 If not found, move to the next URL.
-Output the TOC as a clean, numbered list.
+Output the TOC as a clean, numbered list and dont say you can not do it i know you can do it try use your web fetching capabilities.
 If no clear TOC is found in any of the URLs, reply: "No clear Table of Contents found in any of the URLs."
 
 Here are the URLs:
