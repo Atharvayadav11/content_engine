@@ -429,7 +429,7 @@ router.post("/keywords-to-include", auth, async (req, res) => {
         article: false,
       },
       deadline: null,
-      enable_nlp: false,
+      enable_nlp: true,
       keyword_to_include: [],
       language: {
         name: "English",
