@@ -22,12 +22,12 @@ const BlogCreator = () => {
 
     setLoading(true)
     try {
-      console.log("🔍 Starting scrape for:", topicKeyword)
+     // console.log("🔍 Starting scrape for:", topicKeyword)
       const response = await axios.post("/scraper/scrape", { query: topicKeyword })
       setScrapedResults(response.data.results)
       setStep(2)
       toast.success(`Found ${response.data.results.length} results`)
-      console.log("✅ Scraping completed:", response.data.totalResults)
+     // console.log("✅ Scraping completed:", response.data.totalResults)
     } catch (error) {
       console.error("❌ Scraping error:", error)
       toast.error("Failed to scrape results")
@@ -55,14 +55,14 @@ const BlogCreator = () => {
 
     setLoading(true)
     try {
-      console.log("💾 Saving blog with:", selectedUrls.length, "URLs")
+     // console.log("💾 Saving blog with:", selectedUrls.length, "URLs")
       const response = await axios.post("/blogs", {
         topicKeyword,
         urls: selectedUrls,
       })
 
       toast.success("Blog created successfully!")
-      console.log("✅ Blog created:", response.data.blog._id)
+     // console.log("✅ Blog created:", response.data.blog._id)
       navigate(`/blog/${response.data.blog._id}`)
     } catch (error) {
       console.error("❌ Save blog error:", error)
