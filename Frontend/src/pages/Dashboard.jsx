@@ -19,7 +19,7 @@ const Dashboard = () => {
     try {
       const response = await axios.get("/blogs")
       setBlogs(response.data.blogs)
-      console.log("📚 Blogs loaded:", response.data.count)
+     // console.log("📚 Blogs loaded:", response.data.count)
     } catch (error) {
       console.error("❌ Error fetching blogs:", error)
       toast.error("Failed to load blogs")
@@ -37,7 +37,7 @@ const Dashboard = () => {
       await axios.delete(`/blogs/${id}`)
       setBlogs(blogs.filter((blog) => blog._id !== id))
       toast.success("Blog deleted successfully")
-      console.log("🗑️ Blog deleted:", id)
+      //console.log("🗑️ Blog deleted:", id)
     } catch (error) {
       console.error("❌ Error deleting blog:", error)
       toast.error("Failed to delete blog")
