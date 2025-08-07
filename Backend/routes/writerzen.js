@@ -193,90 +193,186 @@ router.delete("/remove-credentials", auth, async (req, res) => {
 })
 
 // Get keyword suggestions
+// router.get("/keywords", auth, async (req, res) => {
+//   try {
+//     const { input } = req.query
+
+//     if (!input) {
+//       return res.status(400).json({ message: "Input keyword is required" })
+//     }
+
+//     console.log("🔍 Getting keyword suggestions for:", input)
+
+//     const authData = await WriterZenAuth.findOne({ userId: req.user._id })
+//     if (!authData || !authData.cookie || !authData.xsrfToken) {
+//       return res.status(401).json({ message: "WriterZen credentials required" })
+//     }
+
+//     const headers = getWriterZenHeaders(authData.cookie, authData.xsrfToken)
+
+//     const payload = {
+//       input: input,
+//       type: "keyword",
+//       location_id: 2840,
+//       language_id: 1000,
+//     }
+
+//     // Step 1: Create Task
+//     const createTaskUrl = "https://app.writerzen.net/api/services/keyword-explorer/v2/task"
+//     const createResp = await axios.post(createTaskUrl, payload, { headers })
+
+//     if (createResp.status !== 200) {
+//       return res.status(createResp.status).json({ error: "Failed to create task" })
+//     }
+
+//     const taskId = createResp.data.data.id
+//     console.log(`✅ Task Created! ID: ${taskId}`)
+
+//     // Update Referer with taskId
+//     headers.Referer = `https://app.writerzen.net/user/keyword-explorer/${taskId}`
+
+//     // Wait for data to be ready
+//     await new Promise((r) => setTimeout(r, 3000))
+
+//     // Step 2: Fetch Data
+//     const fetchUrl = `https://app.writerzen.net/api/services/keyword-explorer/v2/task/get-data?id=${taskId}`
+//     const fetchResp = await axios.get(fetchUrl, { headers })
+
+//     if (fetchResp.status === 200) {
+//       console.log("✅ Keyword data fetched successfully")
+
+//       // Extract top 10 keywords
+//       const ideas = fetchResp.data?.data?.ideas || []
+//       const topKeywords = ideas.slice(0, 10).map((item) => ({
+//         keyword: item.keyword,
+//         searchVolume: item.search_volume,
+//         competition: item.competition,
+//         id: item.id,
+//       }))
+
+//       console.log("📊 Top keywords found:", topKeywords.length)
+
+//       return res.json({
+//         status: 200,
+//         data: {
+//           keywords: topKeywords,
+//           total: ideas.length,
+//         },
+//       })
+//     } else {
+//       return res.status(fetchResp.status).json({ error: "Failed to fetch data" })
+//     }
+//   } catch (error) {
+//     console.error("❌ Keyword Suggestions Error:", error.response?.data || error.message)
+
+//     // If credentials are invalid, mark them as such
+//     if (error.response?.status === 401 || error.response?.status === 403) {
+//       await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false })
+//       return res.status(401).json({
+//         error: "WriterZen credentials are invalid or expired. Please update them.",
+//         needsCredentialUpdate: true,
+//       })
+//     }
+
+//     res.status(500).json({ error: "Internal server error" })
+//   }
+// })
 router.get("/keywords", auth, async (req, res) => {
   try {
-    const { input } = req.query
+    const { input } = req.query;
 
     if (!input) {
-      return res.status(400).json({ message: "Input keyword is required" })
+      return res.status(400).json({ message: "Input keyword is required" });
     }
 
-    console.log("🔍 Getting keyword suggestions for:", input)
+    console.log("🔍 Getting keyword suggestions for:", input);
 
-    const authData = await WriterZenAuth.findOne({ userId: req.user._id })
+    const authData = await WriterZenAuth.findOne({ userId: req.user._id });
     if (!authData || !authData.cookie || !authData.xsrfToken) {
-      return res.status(401).json({ message: "WriterZen credentials required" })
+      return res.status(401).json({ message: "WriterZen credentials required" });
     }
 
-    const headers = getWriterZenHeaders(authData.cookie, authData.xsrfToken)
+    const headers = getWriterZenHeaders(authData.cookie, authData.xsrfToken);
 
     const payload = {
       input: input,
       type: "keyword",
       location_id: 2840,
       language_id: 1000,
-    }
+    };
 
     // Step 1: Create Task
-    const createTaskUrl = "https://app.writerzen.net/api/services/keyword-explorer/v2/task"
-    const createResp = await axios.post(createTaskUrl, payload, { headers })
+    const createTaskUrl = "https://app.writerzen.net/api/services/keyword-explorer/v2/task";
+    const createResp = await axios.post(createTaskUrl, payload, { headers });
 
     if (createResp.status !== 200) {
-      return res.status(createResp.status).json({ error: "Failed to create task" })
+      return res.status(createResp.status).json({ error: "Failed to create task" });
     }
 
-    const taskId = createResp.data.data.id
-    console.log(`✅ Task Created! ID: ${taskId}`)
+    const taskId = createResp.data.data.id;
+   // console.log(`✅ Task Created! ID: ${taskId}`);
 
-    // Update Referer with taskId
-    headers.Referer = `https://app.writerzen.net/user/keyword-explorer/${taskId}`
+    // Update Referer header
+    headers.Referer = `https://app.writerzen.net/user/keyword-explorer/${taskId}`;
 
-    // Wait for data to be ready
-    await new Promise((r) => setTimeout(r, 3000))
+    // Step 2: Poll until data is ready (max 3 min)
+    const fetchUrl = `https://app.writerzen.net/api/services/keyword-explorer/v2/task/get-data?id=${taskId}`;
 
-    // Step 2: Fetch Data
-    const fetchUrl = `https://app.writerzen.net/api/services/keyword-explorer/v2/task/get-data?id=${taskId}`
-    const fetchResp = await axios.get(fetchUrl, { headers })
+    let ideas = [];
+    const maxAttempts = 36; // 36 attempts * 5s = 180s (3 min)
+    let attempt = 0;
 
-    if (fetchResp.status === 200) {
-      console.log("✅ Keyword data fetched successfully")
+    while (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 5000)); // Wait 5 seconds
 
-      // Extract top 10 keywords
-      const ideas = fetchResp.data?.data?.ideas || []
-      const topKeywords = ideas.slice(0, 10).map((item) => ({
-        keyword: item.keyword,
-        searchVolume: item.search_volume,
-        competition: item.competition,
-        id: item.id,
-      }))
+      const fetchResp = await axios.get(fetchUrl, { headers });
 
-      console.log("📊 Top keywords found:", topKeywords.length)
+      if (fetchResp.status === 200 && fetchResp.data?.data?.ideas?.length > 0) {
+        ideas = fetchResp.data.data.ideas;
+       // console.log("✅ Keyword data fetched successfully");
+        break;
+      }
 
-      return res.json({
-        status: 200,
-        data: {
-          keywords: topKeywords,
-          total: ideas.length,
-        },
-      })
-    } else {
-      return res.status(fetchResp.status).json({ error: "Failed to fetch data" })
+     // console.log(`⏳ Attempt ${attempt + 1}: Waiting for data...`);
+      attempt++;
     }
+
+    if (ideas.length === 0) {
+      return res.status(408).json({ error: "Timeout: No keyword data available after 3 minutes." });
+    }
+
+    // Extract top 10 keywords
+    const topKeywords = ideas.slice(0, 10).map((item) => ({
+      keyword: item.keyword,
+      searchVolume: item.search_volume,
+      competition: item.competition,
+      id: item.id,
+    }));
+
+   // console.log("📊 Top keywords found:", topKeywords.length);
+
+    return res.json({
+      status: 200,
+      data: {
+        keywords: topKeywords,
+        total: ideas.length,
+      },
+    });
+
   } catch (error) {
-    console.error("❌ Keyword Suggestions Error:", error.response?.data || error.message)
+    console.error("❌ Keyword Suggestions Error:", error.response?.data || error.message);
 
-    // If credentials are invalid, mark them as such
     if (error.response?.status === 401 || error.response?.status === 403) {
-      await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false })
+      await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false });
       return res.status(401).json({
         error: "WriterZen credentials are invalid or expired. Please update them.",
         needsCredentialUpdate: true,
-      })
+      });
     }
 
-    res.status(500).json({ error: "Internal server error" })
+    res.status(500).json({ error: "Internal server error" });
   }
-})
+});
 
 // Get keywords to include
 
@@ -290,7 +386,7 @@ router.post("/keywords-to-include", auth, async (req, res) => {
       return res.status(400).json({ message: "Keyword is required" })
     }
 
-    console.log("🎯 Getting keywords to include for:", keyword)
+    //console.log("🎯 Getting keywords to include for:", keyword)
 
     const authData = await WriterZenAuth.findOne({ userId: req.user._id })
     if (!authData || !authData.cookie || !authData.xsrfToken) {
@@ -304,17 +400,17 @@ router.post("/keywords-to-include", auth, async (req, res) => {
     // Step 1: Create Project
     const createProjectPayload = { name: keyword }
     const createResponse = await axios.post(`${BASE_URL}/projects`, createProjectPayload, { headers })
-    console.log("✅ Project Created Successfully");
-    console.log("Project Creation Response:", createResponse.data);
+  //  console.log("✅ Project Created Successfully");
+   // console.log("Project Creation Response:", createResponse.data);
     const projectData = createResponse.data?.data;
     if (!projectData) {
-      console.log("⚠ Project creation failed:", createResponse.data)
+   //   console.log("⚠ Project creation failed:", createResponse.data)
       return res.status(400).json({ message: "Project creation failed" })
     }
 
     const user_id = projectData.user_id
     const project_id = projectData.id
-    console.log("✅ Project Created - User ID:", user_id, "Project ID:", project_id)
+  //  console.log("✅ Project Created - User ID:", user_id, "Project ID:", project_id)
 
     // Step 2: Create Task
     const taskPayload = {
@@ -363,16 +459,16 @@ router.post("/keywords-to-include", auth, async (req, res) => {
     }
 
     const taskResponse = await axios.post(`${BASE_URL}/tasks`, taskPayload, { headers })
-    console.log("✅ Task Created Successfully")
-    console.log("Task Creation Response:", taskResponse.data);
-    console.log("TASK DATA KA DATA USKE ANDAR ID HAI KYA 2 SE START KARKE:", taskResponse.data?.data);
+  //  console.log("✅ Task Created Successfully")
+ //   console.log("Task Creation Response:", taskResponse.data);
+ //   console.log("TASK DATA KA DATA USKE ANDAR ID HAI KYA 2 SE START KARKE:", taskResponse.data?.data);
     const taskId = taskResponse.data?.data?.id
     if (!taskId) {
-      console.log("⚠ No Task ID found in the response.")
+   //   console.log("⚠ No Task ID found in the response.")
       return res.status(400).json({ message: "Task creation failed" })
     }
 
-    console.log(`📋 Task ID: ${taskId}`)
+//    console.log(`📋 Task ID: ${taskId}`)
 
     // -----------------------------
     // ✅ Step 3: Get keywords data
@@ -392,11 +488,11 @@ router.post("/keywords-to-include", auth, async (req, res) => {
           const keywordData = getResponse.data?.data || [];
 
           if (Array.isArray(keywordData[0]) && keywordData[0].length > 0) {
-            console.log("✅ Keywords ready!");
+        //    console.log("✅ Keywords ready!");
             return keywordData;
           }
 
-          console.log("⏳ Keywords not ready yet... retrying in", delay / 1000, "sec");
+       //   console.log("⏳ Keywords not ready yet... retrying in", delay / 1000, "sec");
           await new Promise((resolve) => setTimeout(resolve, delay));
         } catch (err) {
           console.log("⚠ Error fetching keywords, retrying...", err.message);
@@ -423,7 +519,7 @@ router.post("/keywords-to-include", auth, async (req, res) => {
       processedKeywords.push(...topKeywords);
     }
 
-    console.log("🎯 Keywords to include found:", processedKeywords.length)
+  //  console.log("🎯 Keywords to include found:", processedKeywords.length)
 
     res.json({
       status: 200,
