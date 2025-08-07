@@ -46,7 +46,7 @@ const BlogDetails = () => {
     try {
       const response = await axios.get(`/blogs/${id}`)
       setBlog(response.data.blog)
-      console.log("📖 Blog loaded:", response.data.blog.topicKeyword)
+    //  console.log("📖 Blog loaded:", response.data.blog.topicKeyword)
     } catch (error) {
       console.error("❌ Error fetching blog:", error)
       toast.error("Failed to load blog")
@@ -61,7 +61,7 @@ const BlogDetails = () => {
       setWriterzenAuth(response.data.isAuthenticated)
       setWriterzenAuthData(response.data.authData)
       setWriterzenLoggedIn(response.data.isAuthenticated)
-      console.log("🔐 WriterZen auth status:", response.data.isAuthenticated)
+   //   console.log("🔐 WriterZen auth status:", response.data.isAuthenticated)
     } catch (error) {
       console.error("❌ Auth check error:", error)
     }
@@ -70,10 +70,10 @@ const BlogDetails = () => {
   const testClaudeConnection = async () => {
     setActionLoading("test-claude")
     try {
-      console.log("🧪 Testing Claude AI connection...")
+   //   console.log("🧪 Testing Claude AI connection...")
       const response = await axios.get("/ai/test-claude")
       toast.success("Claude AI connection successful!")
-      console.log("✅ Claude test result:", response.data.response)
+     // console.log("✅ Claude test result:", response.data.response)
     } catch (error) {
       console.error("❌ Claude test error:", error)
       toast.error("Claude AI connection failed")
@@ -93,7 +93,7 @@ const BlogDetails = () => {
       setWriterzenAuthData(response.data.authData)
       setWriterzenLoggedIn(true)
       toast.success("WriterZen credentials saved and logged in successfully!")
-      console.log("✅ WriterZen credentials saved and logged in")
+    //  console.log("✅ WriterZen credentials saved and logged in")
     } catch (error) {
       console.error("❌ Save credentials error:", error)
       toast.error(error.response?.data?.message || "Failed to save credentials")
@@ -109,7 +109,7 @@ const BlogDetails = () => {
       // Just mark as logged in since credentials already exist
       setWriterzenLoggedIn(true)
       toast.success("Logged in with existing WriterZen credentials!")
-      console.log("✅ Logged in with existing WriterZen credentials")
+      //console.log("✅ Logged in with existing WriterZen credentials")
     } catch (error) {
       console.error("❌ Continue with existing error:", error)
       toast.error("Failed to login with existing credentials")
@@ -134,7 +134,7 @@ const BlogDetails = () => {
       setSelectedKeywords([])
       setSelectedIncludeKeywords([])
       toast.success("Logged out from WriterZen successfully!")
-      console.log("🚪 WriterZen logout successful")
+     // console.log("🚪 WriterZen logout successful")
     } catch (error) {
       console.error("❌ Logout error:", error)
       toast.error("Failed to logout")
@@ -147,7 +147,7 @@ const BlogDetails = () => {
     setActionLoading("toc")
     try {
       const urls = blog.urls.map((url) => url.url)
-      console.log("📋 Extracting TOC from URLs using Claude AI:", urls.length)
+   //   console.log("📋 Extracting TOC from URLs using Claude AI:", urls.length)
 
       const response = await axios.post("/ai/extract-toc", { urls })
 
@@ -161,7 +161,7 @@ const BlogDetails = () => {
       }))
 
       toast.success("Table of Contents extracted using Claude AI!")
-      console.log("✅ TOC extracted successfully using Claude AI")
+  //    console.log("✅ TOC extracted successfully using Claude AI")
     } catch (error) {
       console.error("❌ TOC extraction error:", error)
       if (error.response?.status === 401) {
@@ -184,7 +184,7 @@ const BlogDetails = () => {
 
     setActionLoading("keywords")
     try {
-      console.log("🔍 Getting keyword suggestions for:", blog.topicKeyword)
+  //    console.log("🔍 Getting keyword suggestions for:", blog.topicKeyword)
       const response = await axios.get(`/writerzen/keywords?input=${encodeURIComponent(blog.topicKeyword)}`)
       setKeywordSuggestions(response.data.data.keywords)
       toast.success(`Found ${response.data.data.keywords.length} keyword suggestions`)
@@ -212,13 +212,13 @@ const BlogDetails = () => {
 
     setActionLoading("include-keywords")
     try {
-      console.log("🎯 Getting keywords to include for:", blog.topicKeyword)
+   //   console.log("🎯 Getting keywords to include for:", blog.topicKeyword)
       const response = await axios.post("/writerzen/keywords-to-include", {
         keyword: blog.topicKeyword,
       })
       setKeywordsToInclude(response.data.data.keywords)
       toast.success(`Found ${response.data.data.keywords.length} keywords to include`)
-      console.log("✅ Keywords to include loaded:", response.data.data.keywords.length)
+  //    console.log("✅ Keywords to include loaded:", response.data.data.keywords.length)
     } catch (error) {
       console.error("❌ Keywords to include error:", error)
       if (error.response?.data?.needsCredentialUpdate) {
@@ -255,7 +255,7 @@ const BlogDetails = () => {
       }))
 
       toast.success("Related keywords saved!")
-      console.log("✅ Related keywords saved:", selectedKeywords.length)
+    //  console.log("✅ Related keywords saved:", selectedKeywords.length)
     } catch (error) {
       console.error("❌ Save keywords error:", error)
       toast.error("Failed to save keywords")
@@ -289,7 +289,7 @@ const BlogDetails = () => {
       }))
 
       toast.success("Keywords to include saved!")
-      console.log("✅ Keywords to include saved:", selectedIncludeKeywords.length)
+    //  console.log("✅ Keywords to include saved:", selectedIncludeKeywords.length)
     } catch (error) {
       console.error("❌ Save include keywords error:", error)
       toast.error("Failed to save keywords to include")
@@ -306,7 +306,7 @@ const BlogDetails = () => {
 
     setActionLoading("description")
     try {
-      console.log("✨ Generating background description using Claude AI")
+    //  console.log("✨ Generating background description using Claude AI")
       const response = await axios.post("/ai/generate-description", {
         topicKeyword: blog.topicKeyword,
         tableOfContent: blog.tableOfContent,
@@ -322,7 +322,7 @@ const BlogDetails = () => {
       }))
 
       toast.success("Background description generated using Claude AI!")
-      console.log("✅ Background description generated using Claude AI")
+    //  console.log("✅ Background description generated using Claude AI")
     } catch (error) {
       console.error("❌ Description generation error:", error)
       if (error.response?.status === 401) {
