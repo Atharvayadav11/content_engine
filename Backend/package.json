@@ -17,6 +17,8 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
+    "cheerio": "^1.1.2",
+    "node-fetch": "^3.3.2",
     "mongoose": "^7.6.3"
   },
   "devDependencies": {
