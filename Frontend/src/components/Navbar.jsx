@@ -1,11 +1,12 @@
 "use client"
 
 import { Link, useLocation } from "react-router-dom"
-import { useAuth } from "../context/AuthContext"
-import { LogOut, User, Home, Plus } from "lucide-react"
+import { UserButton, useUser } from '@clerk/clerk-react'
+import { Home, Plus } from "lucide-react"
+import CreditBalance from './CreditBalance'
 
 const Navbar = () => {
-  const { user, logout } = useAuth()
+  const { user } = useUser()
   const location = useLocation()
 
   const isActive = (path) => location.pathname === path
@@ -47,18 +48,22 @@ const Navbar = () => {
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <User size={16} />
-              <span>{user?.username}</span>
+            <div className="w-64">
+              <CreditBalance />
             </div>
-
-            <button
-              onClick={logout}
-              className="flex items-center space-x-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
-            >
-              <LogOut size={16} />
-              <span>Logout</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">
+                Welcome, {user?.firstName || user?.username || 'User'}
+              </span>
+              <UserButton 
+                afterSignOutUrl="/sign-in"
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8"
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

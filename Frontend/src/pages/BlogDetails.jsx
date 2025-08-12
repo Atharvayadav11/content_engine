@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "react-router-dom"
+import { useAuth } from '@clerk/clerk-react'
 import axios from "axios"
 import toast from "react-hot-toast"
+import { handleApiCall } from "../utils/apiClient"
 import {
   FileText,
   Search,
@@ -25,6 +27,7 @@ import WriterZenCredentialsModal from "../components/WriterZenCredentialsModal"
 
 const BlogDetails = () => {
   const { id } = useParams()
+  const { getToken } = useAuth()
   const [blog, setBlog] = useState(null)
   const [loading, setLoading] = useState(true)
   const [writerzenAuth, setWriterzenAuth] = useState(false)
@@ -44,12 +47,20 @@ const BlogDetails = () => {
 
   const fetchBlog = async () => {
     try {
-      const response = await axios.get(`/blogs/${id}`)
-      setBlog(response.data.blog)
-    //  console.log("📖 Blog loaded:", response.data.blog.topicKeyword)
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.get(`/blogs/${id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          setBlog(response.data.blog)
+          return response
+        },
+        "load blog",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Error fetching blog:", error)
-      toast.error("Failed to load blog")
+      // Error handling is done in handleApiCall
     } finally {
       setLoading(false)
     }
@@ -57,11 +68,13 @@ const BlogDetails = () => {
 
   const checkWriterzenAuth = async () => {
     try {
-      const response = await axios.get("/writerzen/auth-status")
+      const token = await getToken()
+      const response = await axios.get("/writerzen/auth-status", {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       setWriterzenAuth(response.data.isAuthenticated)
       setWriterzenAuthData(response.data.authData)
       setWriterzenLoggedIn(response.data.isAuthenticated)
-   //   console.log("🔐 WriterZen auth status:", response.data.isAuthenticated)
     } catch (error) {
       console.error("❌ Auth check error:", error)
     }
@@ -70,13 +83,20 @@ const BlogDetails = () => {
   const testClaudeConnection = async () => {
     setActionLoading("test-claude")
     try {
-   //   console.log("🧪 Testing Claude AI connection...")
-      const response = await axios.get("/ai/test-claude")
-      toast.success("Claude AI connection successful!")
-     // console.log("✅ Claude test result:", response.data.response)
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.get("/ai/test-claude", {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          toast.success("Claude AI connection successful!")
+          return response
+        },
+        "test Claude AI connection",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Claude test error:", error)
-      toast.error("Claude AI connection failed")
+      // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
     }
@@ -88,15 +108,23 @@ const BlogDetails = () => {
       const endpoint = writerzenAuthData ? "/writerzen/update-credentials" : "/writerzen/save-credentials"
       const method = writerzenAuthData ? "put" : "post"
 
-      const response = await axios[method](endpoint, credentials)
-      setWriterzenAuth(true)
-      setWriterzenAuthData(response.data.authData)
-      setWriterzenLoggedIn(true)
-      toast.success("WriterZen credentials saved and logged in successfully!")
-    //  console.log("✅ WriterZen credentials saved and logged in")
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios[method](endpoint, credentials, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          setWriterzenAuth(true)
+          setWriterzenAuthData(response.data.authData)
+          setWriterzenLoggedIn(true)
+          toast.success("WriterZen credentials saved and logged in successfully!")
+          return response
+        },
+        "save WriterZen credentials",
+        getToken
+      )
     } catch (error) {
       console.error("❌ Save credentials error:", error)
-      toast.error(error.response?.data?.message || "Failed to save credentials")
       throw error
     } finally {
       setActionLoading("")
@@ -125,19 +153,27 @@ const BlogDetails = () => {
 
     setActionLoading("logout")
     try {
-      await axios.delete("/writerzen/remove-credentials")
-      setWriterzenAuth(false)
-      setWriterzenAuthData(null)
-      setWriterzenLoggedIn(false)
-      setKeywordSuggestions([])
-      setKeywordsToInclude([])
-      setSelectedKeywords([])
-      setSelectedIncludeKeywords([])
-      toast.success("Logged out from WriterZen successfully!")
-     // console.log("🚪 WriterZen logout successful")
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.delete("/writerzen/remove-credentials", {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          setWriterzenAuth(false)
+          setWriterzenAuthData(null)
+          setWriterzenLoggedIn(false)
+          setKeywordSuggestions([])
+          setKeywordsToInclude([])
+          setSelectedKeywords([])
+          setSelectedIncludeKeywords([])
+          toast.success("Logged out from WriterZen successfully!")
+          return response
+        },
+        "logout from WriterZen",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Logout error:", error)
-      toast.error("Failed to logout")
+      // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
     }
@@ -147,30 +183,33 @@ const BlogDetails = () => {
     setActionLoading("toc")
     try {
       const urls = blog.urls.map((url) => url.url)
-   //   console.log("📋 Extracting TOC from URLs using Claude AI:", urls.length)
 
-      const response = await axios.post("/ai/extract-toc", { urls })
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.post("/ai/extract-toc", { urls }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-      await axios.put(`/blogs/${id}`, {
-        tableOfContent: response.data.tableOfContent,
-      })
+          await axios.put(`/blogs/${id}`, {
+            tableOfContent: response.data.tableOfContent,
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-      setBlog((prev) => ({
-        ...prev,
-        tableOfContent: response.data.tableOfContent,
-      }))
+          setBlog((prev) => ({
+            ...prev,
+            tableOfContent: response.data.tableOfContent,
+          }))
 
-      toast.success("Table of Contents extracted using Claude AI!")
-  //    console.log("✅ TOC extracted successfully using Claude AI")
+          toast.success("Table of Contents extracted using Claude AI!")
+          return response
+        },
+        "extract table of contents",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ TOC extraction error:", error)
-      if (error.response?.status === 401) {
-        toast.error("Invalid Anthropic API key")
-      } else if (error.response?.status === 429) {
-        toast.error("Anthropic API rate limit exceeded")
-      } else {
-        toast.error("Failed to extract TOC")
-      }
+      // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
     }
@@ -184,20 +223,25 @@ const BlogDetails = () => {
 
     setActionLoading("keywords")
     try {
-  //    console.log("🔍 Getting keyword suggestions for:", blog.topicKeyword)
-      const response = await axios.get(`/writerzen/keywords?input=${encodeURIComponent(blog.topicKeyword)}`)
-      setKeywordSuggestions(response.data.data.keywords)
-      toast.success(`Found ${response.data.data.keywords.length} keyword suggestions`)
-      console.log("✅ Keyword suggestions loaded:", response.data.data.keywords.length)
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.get(`/writerzen/keywords?input=${encodeURIComponent(blog.topicKeyword)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          setKeywordSuggestions(response.data.data.keywords)
+          toast.success(`Found ${response.data.data.keywords.length} keyword suggestions`)
+          return response
+        },
+        "get keyword suggestions",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Keyword suggestions error:", error)
       if (error.response?.data?.needsCredentialUpdate) {
         toast.error("WriterZen credentials are invalid. Please update them.")
         setWriterzenAuth(false)
         setWriterzenLoggedIn(false)
         checkWriterzenAuth()
-      } else {
-        toast.error("Failed to get keyword suggestions")
       }
     } finally {
       setActionLoading("")
@@ -210,24 +254,39 @@ const BlogDetails = () => {
       return
     }
 
+    if (!blog || !blog.topicKeyword) {
+      toast.error("Blog data not loaded. Please wait and try again.")
+      return
+    }
+
     setActionLoading("include-keywords")
     try {
-   //   console.log("🎯 Getting keywords to include for:", blog.topicKeyword)
-      const response = await axios.post("/writerzen/keywords-to-include", {
-        keyword: blog.topicKeyword,
-      })
-      setKeywordsToInclude(response.data.data.keywords)
-      toast.success(`Found ${response.data.data.keywords.length} keywords to include`)
-  //    console.log("✅ Keywords to include loaded:", response.data.data.keywords.length)
+      console.log("🎯 Getting keywords to include for:", blog.topicKeyword)
+      
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.post("/writerzen/keywords-to-include", {
+            keyword: blog.topicKeyword.trim()
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          setKeywordsToInclude(response.data.data.keywords)
+          toast.success(`Found ${response.data.data.keywords.length} keywords to include`)
+          return response
+        },
+        "get keywords to include",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Keywords to include error:", error)
+      console.error("❌ Keywords to include error details:", error.response?.data)
       if (error.response?.data?.needsCredentialUpdate) {
         toast.error("WriterZen credentials are invalid. Please update them.")
         setWriterzenAuth(false)
         setWriterzenLoggedIn(false)
         checkWriterzenAuth()
-      } else {
-        toast.error("Failed to get keywords to include")
+      } else if (error.response?.status === 400) {
+        toast.error(`Invalid request: ${error.response?.data?.message || 'Bad request'}`)
       }
     } finally {
       setActionLoading("")
@@ -237,28 +296,36 @@ const BlogDetails = () => {
   const saveSelectedKeywords = async () => {
     setActionLoading("save-keywords")
     try {
-      await axios.put(`/blogs/${id}`, {
-        relatedKeywords: selectedKeywords.map((k) => ({
-          keyword: k.keyword,
-          searchVolume: k.searchVolume,
-          selected: true,
-        })),
-      })
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.put(`/blogs/${id}`, {
+            relatedKeywords: selectedKeywords.map((k) => ({
+              keyword: k.keyword,
+              searchVolume: k.searchVolume,
+              selected: true,
+            })),
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-      setBlog((prev) => ({
-        ...prev,
-        relatedKeywords: selectedKeywords.map((k) => ({
-          keyword: k.keyword,
-          searchVolume: k.searchVolume,
-          selected: true,
-        })),
-      }))
+          setBlog((prev) => ({
+            ...prev,
+            relatedKeywords: selectedKeywords.map((k) => ({
+              keyword: k.keyword,
+              searchVolume: k.searchVolume,
+              selected: true,
+            })),
+          }))
 
-      toast.success("Related keywords saved!")
-    //  console.log("✅ Related keywords saved:", selectedKeywords.length)
+          toast.success("Related keywords saved!")
+          return response
+        },
+        "save keywords",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Save keywords error:", error)
-      toast.error("Failed to save keywords")
+      // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
     }
@@ -267,32 +334,40 @@ const BlogDetails = () => {
   const saveSelectedIncludeKeywords = async () => {
     setActionLoading("save-include-keywords")
     try {
-      await axios.put(`/blogs/${id}`, {
-        keywordsToInclude: selectedIncludeKeywords.map((k) => ({
-          text: k.text,
-          searchVolume: k.searchVolume,
-          repeat: k.repeat,
-          density: k.density,
-          selected: true,
-        })),
-      })
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.put(`/blogs/${id}`, {
+            keywordsToInclude: selectedIncludeKeywords.map((k) => ({
+              text: k.text,
+              searchVolume: k.searchVolume,
+              repeat: k.repeat,
+              density: k.density,
+              selected: true,
+            })),
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-      setBlog((prev) => ({
-        ...prev,
-        keywordsToInclude: selectedIncludeKeywords.map((k) => ({
-          text: k.text,
-          searchVolume: k.searchVolume,
-          repeat: k.repeat,
-          density: k.density,
-          selected: true,
-        })),
-      }))
+          setBlog((prev) => ({
+            ...prev,
+            keywordsToInclude: selectedIncludeKeywords.map((k) => ({
+              text: k.text,
+              searchVolume: k.searchVolume,
+              repeat: k.repeat,
+              density: k.density,
+              selected: true,
+            })),
+          }))
 
-      toast.success("Keywords to include saved!")
-    //  console.log("✅ Keywords to include saved:", selectedIncludeKeywords.length)
+          toast.success("Keywords to include saved!")
+          return response
+        },
+        "save keywords to include",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Save include keywords error:", error)
-      toast.error("Failed to save keywords to include")
+      // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
     }
@@ -306,32 +381,35 @@ const BlogDetails = () => {
 
     setActionLoading("description")
     try {
-    //  console.log("✨ Generating background description using Claude AI")
-      const response = await axios.post("/ai/generate-description", {
-        topicKeyword: blog.topicKeyword,
-        tableOfContent: blog.tableOfContent,
-      })
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.post("/ai/generate-description", {
+            topicKeyword: blog.topicKeyword,
+            tableOfContent: blog.tableOfContent,
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-      await axios.put(`/blogs/${id}`, {
-        backgroundDescription: response.data.backgroundDescription,
-      })
+          await axios.put(`/blogs/${id}`, {
+            backgroundDescription: response.data.backgroundDescription,
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-      setBlog((prev) => ({
-        ...prev,
-        backgroundDescription: response.data.backgroundDescription,
-      }))
+          setBlog((prev) => ({
+            ...prev,
+            backgroundDescription: response.data.backgroundDescription,
+          }))
 
-      toast.success("Background description generated using Claude AI!")
-    //  console.log("✅ Background description generated using Claude AI")
+          toast.success("Background description generated using Claude AI!")
+          return response
+        },
+        "generate background description",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Description generation error:", error)
-      if (error.response?.status === 401) {
-        toast.error("Invalid Anthropic API key")
-      } else if (error.response?.status === 429) {
-        toast.error("Anthropic API rate limit exceeded")
-      } else {
-        toast.error("Failed to generate description")
-      }
+      // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
     }

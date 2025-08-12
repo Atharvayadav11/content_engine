@@ -1,10 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from '@clerk/clerk-react'
 import axios from "axios"
 import toast from "react-hot-toast"
-import { Search, Save, Loader2 } from "lucide-react"
+import { Search, Save, Loader2, AlertTriangle } from "lucide-react"
+import { handleApiCall } from "../utils/apiClient"
+import CreditExhaustionModal from "../components/CreditExhaustionModal"
 
 const BlogCreator = () => {
   const [step, setStep] = useState(1)
@@ -12,7 +15,31 @@ const BlogCreator = () => {
   const [topicKeyword, setTopicKeyword] = useState("")
   const [scrapedResults, setScrapedResults] = useState([])
   const [selectedUrls, setSelectedUrls] = useState([])
+  const [credits, setCredits] = useState(0)
+  const [showCreditModal, setShowCreditModal] = useState(false)
+  const { getToken } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    checkCredits()
+  }, [])
+
+  const checkCredits = async () => {
+    try {
+      const token = await getToken()
+      const response = await axios.get('/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setCredits(response.data.user.credits)
+      
+      // If no credits, show modal immediately
+      if (response.data.user.credits === 0) {
+        setShowCreditModal(true)
+      }
+    } catch (error) {
+      console.error('Failed to check credits:', error)
+    }
+  }
 
   const handleScrape = async () => {
     if (!topicKeyword.trim()) {
@@ -22,15 +49,22 @@ const BlogCreator = () => {
 
     setLoading(true)
     try {
-     // console.log("🔍 Starting scrape for:", topicKeyword)
-      const response = await axios.post("/scraper/scrape", { query: topicKeyword })
-      setScrapedResults(response.data.results)
-      setStep(2)
-      toast.success(`Found ${response.data.results.length} results`)
-     // console.log("✅ Scraping completed:", response.data.totalResults)
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.post("/scraper/scrape", { query: topicKeyword }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          setScrapedResults(response.data.results)
+          setStep(2)
+          toast.success(`Found ${response.data.results.length} results`)
+          return response
+        },
+        "scrape competitor blogs",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Scraping error:", error)
-      toast.error("Failed to scrape results")
+      // Error handling is done in handleApiCall
     } finally {
       setLoading(false)
     }
@@ -53,20 +87,42 @@ const BlogCreator = () => {
       return
     }
 
+    // Check credits before attempting to save
+    if (credits === 0) {
+      setShowCreditModal(true)
+      return
+    }
+
     setLoading(true)
     try {
-     // console.log("💾 Saving blog with:", selectedUrls.length, "URLs")
-      const response = await axios.post("/blogs", {
-        topicKeyword,
-        urls: selectedUrls,
-      })
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.post("/blogs", {
+            topicKeyword,
+            urls: selectedUrls,
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-      toast.success("Blog created successfully!")
-     // console.log("✅ Blog created:", response.data.blog._id)
-      navigate(`/blog/${response.data.blog._id}`)
+          toast.success("Blog created successfully! 1 credit used.")
+          
+          // Update credits and refresh credit balance
+          setCredits(prev => prev - 1)
+          if (window.refreshCredits) {
+            window.refreshCredits()
+          }
+          
+          navigate(`/blog/${response.data.blog._id}`)
+          return response
+        },
+        "create blog",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Save blog error:", error)
-      toast.error("Failed to create blog")
+      if (error.response?.status === 402) {
+        setShowCreditModal(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -76,8 +132,44 @@ const BlogCreator = () => {
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Create New Blog</h1>
-        <p className="text-gray-600 mt-1">Start by entering a topic keyword to scrape competitor blogs</p>
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-gray-600">Start by entering a topic keyword to scrape competitor blogs</p>
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+            credits === 0 
+              ? 'bg-red-100 text-red-800' 
+              : credits === 1 
+                ? 'bg-yellow-100 text-yellow-800'
+                : 'bg-green-100 text-green-800'
+          }`}>
+            {credits} blog{credits !== 1 ? 's' : ''} remaining
+          </div>
+        </div>
       </div>
+
+      {/* Credit Warning */}
+      {credits === 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertTriangle className="text-red-600 mr-3" size={20} />
+            <div className="text-sm text-red-800">
+              <p className="font-medium">No blog credits remaining</p>
+              <p>You've used all your free blog creation credits. Please upgrade to create more blogs.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {credits === 1 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertTriangle className="text-yellow-600 mr-3" size={20} />
+            <div className="text-sm text-yellow-800">
+              <p className="font-medium">Last blog credit</p>
+              <p>This is your final free blog. Use it wisely! Credits are never refunded, even if you delete the blog.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Step 1: Topic Keyword Input */}
       {step === 1 && (
@@ -100,12 +192,16 @@ const BlogCreator = () => {
             </div>
 
             <button
-              onClick={handleScrape}
+              onClick={credits === 0 ? () => setShowCreditModal(true) : handleScrape}
               disabled={loading || !topicKeyword.trim()}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`inline-flex items-center px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                credits === 0 
+                  ? 'bg-gray-500 hover:bg-gray-600' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {loading ? <Loader2 size={20} className="mr-2 animate-spin" /> : <Search size={20} className="mr-2" />}
-              {loading ? "Scraping..." : "Start Scraping"}
+              {credits === 0 ? "No Credits Available" : loading ? "Scraping..." : "Start Scraping"}
             </button>
           </div>
         </div>
@@ -173,16 +269,25 @@ const BlogCreator = () => {
               Back to Keyword
             </button>
             <button
-              onClick={handleSaveBlog}
+              onClick={credits === 0 ? () => setShowCreditModal(true) : handleSaveBlog}
               disabled={loading || selectedUrls.length === 0}
-              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`inline-flex items-center px-4 py-2 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                credits === 0 
+                  ? 'bg-gray-500 hover:bg-gray-600' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
             >
               {loading ? <Loader2 size={20} className="mr-2 animate-spin" /> : <Save size={20} className="mr-2" />}
-              {loading ? "Saving..." : "Save Blog"}
+              {credits === 0 ? "No Credits Available" : loading ? "Saving..." : "Save Blog (1 Credit)"}
             </button>
           </div>
         </div>
       )}
+
+      <CreditExhaustionModal 
+        isOpen={showCreditModal} 
+        onClose={() => setShowCreditModal(false)} 
+      />
     </div>
   )
 }

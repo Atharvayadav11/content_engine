@@ -1,11 +1,13 @@
 const express = require("express")
 const Blog = require("../models/Blog")
 const auth = require("../middleware/auth")
+const checkCredits = require("../middleware/credits")
+const CreditService = require("../services/creditService")
 
 const router = express.Router()
 
 // Create new blog
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, checkCredits('blog_creation', 1), async (req, res) => {
   try {
     const { topicKeyword, urls } = req.body
 
@@ -19,11 +21,20 @@ router.post("/", auth, async (req, res) => {
 
     await blog.save()
 
+    // Deduct credit after successful blog creation
+    await CreditService.deductCredits(
+      req.user._id, 
+      'blog_creation', 
+      1,
+      blog._id
+    )
+
     console.log("✅ Blog created successfully:", blog._id)
 
     res.status(201).json({
-      message: "Blog created successfully",
+      message: "Blog created successfully - 1 credit used",
       blog,
+      creditsUsed: 1,
     })
   } catch (error) {
     console.error("❌ Create Blog Error:", error)

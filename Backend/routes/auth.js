@@ -1,7 +1,7 @@
 const express = require("express")
-const jwt = require("jsonwebtoken")
 const User = require("../models/User")
 const auth = require("../middleware/auth")
+const CreditService = require("../services/creditService")
 
 const router = express.Router()
 
@@ -97,17 +97,52 @@ router.post("/login", async (req, res) => {
 // Get current user
 router.get("/me", auth, async (req, res) => {
   try {
+    const user = await User.findById(req.user._id).select('-__v')
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+    
+    // Get recent transactions
+    const recentTransactions = await CreditService.getUserTransactions(req.user._id, 5)
+    
     res.json({
       user: {
-        id: req.user._id,
-        username: req.user.username,
-        email: req.user.email,
-        role: req.user.role,
+        id: user._id,
+        clerkId: user.clerkId,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        credits: user.credits,
+        totalCreditsUsed: user.totalCreditsUsed,
+        recentTransactions
       },
     })
   } catch (error) {
     console.error("❌ Get User Error:", error)
     res.status(500).json({ message: "Server error" })
+  }
+})
+
+// Get user credit information
+router.get("/credits", auth, async (req, res) => {
+  try {
+    const user = await CreditService.getUserCredits(req.user._id)
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+    
+    const transactions = await CreditService.getUserTransactions(req.user._id, 10)
+    
+    res.json({
+      credits: user.credits,
+      totalCreditsUsed: user.totalCreditsUsed,
+      transactions
+    })
+  } catch (error) {
+    console.error("❌ Get Credits Error:", error)
+    res.status(500).json({ message: "Error fetching credit information" })
   }
 })
 

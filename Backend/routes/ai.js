@@ -1,6 +1,8 @@
 const express = require("express")
 const Anthropic = require("@anthropic-ai/sdk")
 const auth = require("../middleware/auth")
+const checkCredits = require("../middleware/credits")
+const CreditService = require("../services/creditService")
 
 const router = express.Router()
 

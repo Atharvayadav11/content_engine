@@ -2,6 +2,8 @@ const express = require("express")
 const axios = require("axios")
 const WriterZenAuth = require("../models/WriterZenAuth")
 const auth = require("../middleware/auth")
+const checkCredits = require("../middleware/credits")
+const CreditService = require("../services/creditService")
 
 const router = express.Router()
 
@@ -301,16 +303,73 @@ router.get("/keywords", auth, async (req, res) => {
       language_id: 1000,
     };
 
+    console.log("📤 Sending keyword suggestions payload:", JSON.stringify(payload, null, 2));
+
     // Step 1: Create Task
     const createTaskUrl = "https://app.writerzen.net/api/services/keyword-explorer/v2/task";
-    const createResp = await axios.post(createTaskUrl, payload, { headers });
-
-    if (createResp.status !== 200) {
-      return res.status(createResp.status).json({ error: "Failed to create task" });
+    
+    let createResp;
+    try {
+      createResp = await axios.post(createTaskUrl, payload, { headers });
+    } catch (taskError) {
+      console.error("❌ WriterZen keyword task creation failed:", {
+        status: taskError.response?.status,
+        statusText: taskError.response?.statusText,
+        data: taskError.response?.data,
+        message: taskError.message,
+        url: createTaskUrl
+      });
+      
+      // Check if it's an authentication error
+      if (taskError.response?.status === 401 || taskError.response?.status === 403) {
+        await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false });
+        return res.status(401).json({
+          message: "WriterZen credentials are invalid or expired. Please update them.",
+          needsCredentialUpdate: true,
+        });
+      }
+      
+      return res.status(500).json({
+        message: "WriterZen keyword task creation API call failed",
+        error: taskError.response?.data || taskError.message,
+        status: taskError.response?.status
+      });
     }
 
-    const taskId = createResp.data.data.id;
-   // console.log(`✅ Task Created! ID: ${taskId}`);
+    console.log("✅ Keyword task HTTP request successful");
+    console.log("Task Creation Response Status:", createResp.status);
+    console.log("Task Creation Response Data:", JSON.stringify(createResp.data, null, 2));
+
+    // Check if WriterZen returned an internal error
+    if (createResp.data?.status === 500) {
+      console.log("❌ WriterZen internal API error (status 500)");
+      return res.status(500).json({ 
+        error: "WriterZen API internal error",
+        message: "WriterZen's keyword explorer service is currently experiencing issues. Please try again later or check your WriterZen account status.",
+        writerzen_status: createResp.data.status,
+        details: createResp.data 
+      });
+    }
+
+    if (createResp.status !== 200) {
+      console.log("❌ Task creation failed with HTTP status:", createResp.status);
+      return res.status(createResp.status).json({ 
+        error: "Failed to create keyword task",
+        details: createResp.data 
+      });
+    }
+
+    const taskId = createResp.data.data?.id;
+    if (!taskId) {
+      console.log("❌ No task ID found in response");
+      return res.status(500).json({ 
+        error: "Task creation failed - no task ID returned",
+        message: "WriterZen API returned success but no task ID. This might indicate an account or subscription issue.",
+        details: createResp.data 
+      });
+    }
+    
+    console.log(`✅ Task Created! ID: ${taskId}`);
 
     // Update Referer header
     headers.Referer = `https://app.writerzen.net/user/keyword-explorer/${taskId}`;
@@ -325,15 +384,33 @@ router.get("/keywords", auth, async (req, res) => {
     while (attempt < maxAttempts) {
       await new Promise((r) => setTimeout(r, 5000)); // Wait 5 seconds
 
-      const fetchResp = await axios.get(fetchUrl, { headers });
+      try {
+        const fetchResp = await axios.get(fetchUrl, { headers });
 
-      if (fetchResp.status === 200 && fetchResp.data?.data?.ideas?.length > 0) {
-        ideas = fetchResp.data.data.ideas;
-       // console.log("✅ Keyword data fetched successfully");
-        break;
+        if (fetchResp.status === 200 && fetchResp.data?.data?.ideas?.length > 0) {
+          ideas = fetchResp.data.data.ideas;
+          console.log("✅ Keyword data fetched successfully");
+          break;
+        }
+
+        console.log(`⏳ Attempt ${attempt + 1}: Waiting for data... Status: ${fetchResp.status}`);
+      } catch (fetchError) {
+        console.error(`❌ Attempt ${attempt + 1} failed:`, {
+          status: fetchError.response?.status,
+          data: fetchError.response?.data,
+          message: fetchError.message
+        });
+        
+        // If it's an auth error, stop trying
+        if (fetchError.response?.status === 401 || fetchError.response?.status === 403) {
+          await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false });
+          return res.status(401).json({
+            message: "WriterZen credentials are invalid or expired. Please update them.",
+            needsCredentialUpdate: true,
+          });
+        }
       }
-
-     // console.log(`⏳ Attempt ${attempt + 1}: Waiting for data...`);
+      
       attempt++;
     }
 
@@ -361,6 +438,12 @@ router.get("/keywords", auth, async (req, res) => {
 
   } catch (error) {
     console.error("❌ Keyword Suggestions Error:", error.response?.data || error.message);
+    console.error("❌ Full keyword suggestions error details:", {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    });
 
     if (error.response?.status === 401 || error.response?.status === 403) {
       await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false });
@@ -370,7 +453,15 @@ router.get("/keywords", auth, async (req, res) => {
       });
     }
 
-    res.status(500).json({ error: "Internal server error" });
+    // Return more specific error information
+    const statusCode = error.response?.status || 500;
+    const errorMessage = error.response?.data?.message || error.message || "Internal server error";
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: error.response?.data,
+      type: "keyword_suggestions_error"
+    });
   }
 });
 
@@ -382,8 +473,12 @@ router.post("/keywords-to-include", auth, async (req, res) => {
      const { keyword } = req.body
    // const keyword = "cold email strategy" // For testing purposes, you can remove this line later;
 
-    if (!keyword) {
-      return res.status(400).json({ message: "Keyword is required" })
+    console.log("📥 Keywords to include request body:", req.body)
+    console.log("📝 Extracted keyword:", keyword)
+
+    if (!keyword || keyword.trim() === '') {
+      console.log("❌ No keyword provided in request")
+      return res.status(400).json({ message: "Keyword is required and cannot be empty" })
     }
 
     //console.log("🎯 Getting keywords to include for:", keyword)
@@ -399,13 +494,45 @@ router.post("/keywords-to-include", auth, async (req, res) => {
 
     // Step 1: Create Project
     const createProjectPayload = { name: keyword }
-    const createResponse = await axios.post(`${BASE_URL}/projects`, createProjectPayload, { headers })
-  //  console.log("✅ Project Created Successfully");
-   // console.log("Project Creation Response:", createResponse.data);
+    console.log("📝 Creating project with payload:", createProjectPayload)
+    
+    let createResponse
+    try {
+      createResponse = await axios.post(`${BASE_URL}/projects`, createProjectPayload, { headers })
+    } catch (projectError) {
+      console.error("❌ WriterZen project creation failed:", {
+        status: projectError.response?.status,
+        statusText: projectError.response?.statusText,
+        data: projectError.response?.data,
+        message: projectError.message
+      })
+      
+      // Check if it's an authentication error
+      if (projectError.response?.status === 401 || projectError.response?.status === 403) {
+        await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false })
+        return res.status(401).json({
+          message: "WriterZen credentials are invalid or expired. Please update them.",
+          needsCredentialUpdate: true,
+        })
+      }
+      
+      return res.status(500).json({
+        message: "WriterZen project creation API call failed",
+        error: projectError.response?.data || projectError.message,
+        status: projectError.response?.status
+      })
+    }
+    console.log("✅ Project Created Successfully")
+    console.log("Project Creation Response Status:", createResponse.status)
+    console.log("Project Creation Response Data:", JSON.stringify(createResponse.data, null, 2))
+    
     const projectData = createResponse.data?.data;
     if (!projectData) {
-   //   console.log("⚠ Project creation failed:", createResponse.data)
-      return res.status(400).json({ message: "Project creation failed" })
+      console.log("⚠ Project creation failed:", createResponse.data)
+      return res.status(500).json({ 
+        message: "Project creation failed - no project data returned",
+        details: createResponse.data 
+      })
     }
 
     const user_id = projectData.user_id
@@ -458,14 +585,59 @@ router.post("/keywords-to-include", auth, async (req, res) => {
       project_id: project_id,
     }
 
-    const taskResponse = await axios.post(`${BASE_URL}/tasks`, taskPayload, { headers })
-  //  console.log("✅ Task Created Successfully")
- //   console.log("Task Creation Response:", taskResponse.data);
- //   console.log("TASK DATA KA DATA USKE ANDAR ID HAI KYA 2 SE START KARKE:", taskResponse.data?.data);
+    console.log("📤 Sending task payload to WriterZen:", JSON.stringify(taskPayload, null, 2))
+    
+    let taskResponse
+    try {
+      taskResponse = await axios.post(`${BASE_URL}/tasks`, taskPayload, { headers })
+    } catch (taskError) {
+      console.error("❌ WriterZen task creation failed:", {
+        status: taskError.response?.status,
+        statusText: taskError.response?.statusText,
+        data: taskError.response?.data,
+        message: taskError.message
+      })
+      
+      // Check if it's an authentication error
+      if (taskError.response?.status === 401 || taskError.response?.status === 403) {
+        await WriterZenAuth.findOneAndUpdate({ userId: req.user._id }, { isValid: false })
+        return res.status(401).json({
+          message: "WriterZen credentials are invalid or expired. Please update them.",
+          needsCredentialUpdate: true,
+        })
+      }
+      
+      return res.status(500).json({
+        message: "WriterZen task creation API call failed",
+        error: taskError.response?.data || taskError.message,
+        status: taskError.response?.status
+      })
+    }
+    console.log("✅ Keywords-to-include task HTTP request successful")
+    console.log("Task Creation Response Status:", taskResponse.status)
+    console.log("Task Creation Response Data:", JSON.stringify(taskResponse.data, null, 2))
+    
+    // Check if WriterZen returned an internal error
+    if (taskResponse.data?.status === 500) {
+      console.log("❌ WriterZen internal API error (status 500)")
+      return res.status(500).json({ 
+        error: "WriterZen API internal error",
+        message: "WriterZen's content creator service is currently experiencing issues. Please try again later or check your WriterZen account status.",
+        writerzen_status: taskResponse.data.status,
+        details: taskResponse.data
+      })
+    }
+    
     const taskId = taskResponse.data?.data?.id
     if (!taskId) {
-   //   console.log("⚠ No Task ID found in the response.")
-      return res.status(400).json({ message: "Task creation failed" })
+      console.log("⚠ No Task ID found in the response.")
+      console.log("Response structure:", JSON.stringify(taskResponse.data, null, 2))
+      
+      return res.status(500).json({ 
+        message: "Task creation failed - no task ID returned",
+        error: "WriterZen API returned success but no task ID. This might indicate an account or subscription issue.",
+        details: taskResponse.data 
+      })
     }
 
 //    console.log(`📋 Task ID: ${taskId}`)
@@ -530,6 +702,12 @@ router.post("/keywords-to-include", auth, async (req, res) => {
     })
   } catch (error) {
     console.error("❌ Keywords to Include Error:", error.response?.data || error.message)
+    console.error("❌ Full error details:", {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    })
 
     // If credentials are invalid, mark them as such
     if (error.response?.status === 401 || error.response?.status === 403) {
@@ -540,7 +718,15 @@ router.post("/keywords-to-include", auth, async (req, res) => {
       })
     }
 
-    res.status(500).json({ error: "Internal server error" })
+    // Return more specific error information
+    const statusCode = error.response?.status || 500
+    const errorMessage = error.response?.data?.message || error.message || "Internal server error"
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: error.response?.data,
+      type: "keywords_to_include_error"
+    })
   }
 })
 

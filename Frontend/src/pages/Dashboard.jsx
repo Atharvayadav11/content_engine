@@ -2,14 +2,18 @@
 
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
-import axios from "axios"
+import { useAuth } from '@clerk/clerk-react'
 import { Plus, Eye, Trash2, Calendar, User } from "lucide-react"
 import LoadingSpinner from "../components/LoadingSpinner"
+import { handleApiCall } from "../utils/apiClient"
+import axios from "axios"
 import toast from "react-hot-toast"
 
 const Dashboard = () => {
   const [blogs, setBlogs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [credits, setCredits] = useState(0)
+  const { getToken } = useAuth()
 
   useEffect(() => {
     fetchBlogs()
@@ -17,30 +21,51 @@ const Dashboard = () => {
 
   const fetchBlogs = async () => {
     try {
-      const response = await axios.get("/blogs")
-      setBlogs(response.data.blogs)
-     // console.log("📚 Blogs loaded:", response.data.count)
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const [blogsResponse, userResponse] = await Promise.all([
+            axios.get("/blogs", {
+              headers: { Authorization: `Bearer ${token}` }
+            }),
+            axios.get("/auth/me", {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+          ])
+          setBlogs(blogsResponse.data.blogs)
+          setCredits(userResponse.data.user.credits)
+          return blogsResponse
+        },
+        "load blogs",
+        getToken
+      )
     } catch (error) {
-      console.error("❌ Error fetching blogs:", error)
-      toast.error("Failed to load blogs")
+      // Error handling is done in handleApiCall
     } finally {
       setLoading(false)
     }
   }
 
   const deleteBlog = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this blog?")) {
+    if (!window.confirm("Are you sure you want to delete this blog?\n\nNote: Credits are NEVER refunded when deleting blogs. The credit used to create this blog will not be returned.")) {
       return
     }
 
     try {
-      await axios.delete(`/blogs/${id}`)
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          return await axios.delete(`/blogs/${id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        },
+        "delete blog",
+        getToken
+      )
       setBlogs(blogs.filter((blog) => blog._id !== id))
       toast.success("Blog deleted successfully")
-      //console.log("🗑️ Blog deleted:", id)
     } catch (error) {
-      console.error("❌ Error deleting blog:", error)
-      toast.error("Failed to delete blog")
+      // Error handling is done in handleApiCall
     }
   }
 
@@ -76,10 +101,15 @@ const Dashboard = () => {
         </div>
         <Link
           to="/blog/create"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          className={`inline-flex items-center px-4 py-2 text-white rounded-md transition-colors ${
+            credits === 0 
+              ? 'bg-gray-500 hover:bg-gray-600 cursor-not-allowed' 
+              : 'bg-blue-600 hover:bg-blue-700'
+          }`}
+          onClick={credits === 0 ? (e) => e.preventDefault() : undefined}
         >
           <Plus size={20} className="mr-2" />
-          Create New Blog
+          {credits === 0 ? 'No Credits Available' : `Create New Blog (${credits} left)`}
         </Link>
       </div>
 
@@ -90,10 +120,15 @@ const Dashboard = () => {
             <p className="text-gray-600 mb-4">Get started by creating your first blog automation project</p>
             <Link
               to="/blog/create"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className={`inline-flex items-center px-4 py-2 text-white rounded-md transition-colors ${
+                credits === 0 
+                  ? 'bg-gray-500 hover:bg-gray-600 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+              onClick={credits === 0 ? (e) => e.preventDefault() : undefined}
             >
               <Plus size={20} className="mr-2" />
-              Create Your First Blog
+              {credits === 0 ? 'No Credits Available' : 'Create Your First Blog'}
             </Link>
           </div>
         </div>
