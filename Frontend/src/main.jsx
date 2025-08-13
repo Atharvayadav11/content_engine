@@ -1,6 +1,6 @@
 import React from "react"
 import ReactDOM from "react-dom/client"
-import { BrowserRouter } from "react-router-dom"
+import { BrowserRouter, useNavigate } from "react-router-dom"
 import { Toaster } from "react-hot-toast"
 import { ClerkProvider } from '@clerk/clerk-react'
 import App from "./App.jsx"
@@ -10,20 +10,31 @@ import "./index.css"
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 if (!PUBLISHABLE_KEY) {
-  throw new Error("Missing Publishable Key")
+  console.error("Missing VITE_CLERK_PUBLISHABLE_KEY environment variable")
+  // Don't throw error in production, show a message instead
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
+function ClerkProviderWithRouter({ children }) {
+  const navigate = useNavigate()
+  
+  return (
     <ClerkProvider 
       publishableKey={PUBLISHABLE_KEY}
-      navigate={(to) => window.location.href = to}
+      navigate={navigate}
       afterSignInUrl="/dashboard"
       afterSignUpUrl="/dashboard"
       signInUrl="/sign-in"
       signUpUrl="/sign-in"
     >
-      <BrowserRouter>
+      {children}
+    </ClerkProvider>
+  )
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <ClerkProviderWithRouter>
         <App />
         <Toaster
           position="top-right"
@@ -35,7 +46,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             },
           }}
         />
-      </BrowserRouter>
-    </ClerkProvider>
+      </ClerkProviderWithRouter>
+    </BrowserRouter>
   </React.StrictMode>,
 )

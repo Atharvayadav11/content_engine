@@ -1,7 +1,7 @@
 "use client"
 
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom"
-import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, SignInButton, UserButton, useUser, useAuth } from '@clerk/clerk-react'
 import { useEffect } from 'react'
 import Layout from "./components/Layout"
 import Dashboard from "./pages/Dashboard"
@@ -11,21 +11,81 @@ import LoadingSpinner from "./components/LoadingSpinner"
 
 function App() {
   const { isLoaded, isSignedIn, user } = useUser()
+  const { userId } = useAuth()
   const navigate = useNavigate()
 
-  // Handle authentication state changes
+  // Handle authentication state changes with more aggressive redirect
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      // If user just signed in and is on sign-in or sign-up page, redirect to dashboard
+    if (isLoaded) {
       const currentPath = window.location.pathname
-      if (currentPath === '/sign-in' || currentPath === '/sign-up') {
-        navigate('/dashboard', { replace: true })
+      
+      if (isSignedIn && (currentPath === '/sign-in' || currentPath === '/sign-up')) {
+        console.log('🔄 User authenticated, redirecting to dashboard from:', currentPath)
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true })
+        }, 100)
       }
     }
   }, [isLoaded, isSignedIn, navigate])
 
+  // Listen for userId changes (when user signs in)
+  useEffect(() => {
+    if (userId) {
+      const currentPath = window.location.pathname
+      if (currentPath === '/sign-in' || currentPath === '/sign-up') {
+        console.log('🔄 UserId detected, redirecting to dashboard')
+        navigate('/dashboard', { replace: true })
+      }
+    }
+  }, [userId, navigate])
+
+  // Backup redirect using window location (more reliable after Clerk auth)
+  useEffect(() => {
+    const handleAuthRedirect = () => {
+      if (isLoaded && isSignedIn) {
+        const currentPath = window.location.pathname
+        if (currentPath === '/sign-in' || currentPath === '/sign-up') {
+          console.log('🔄 Backup redirect - using window.location')
+          window.location.href = '/dashboard'
+        }
+      }
+    }
+
+    // Listen for Clerk events
+    window.addEventListener('clerk:loaded', handleAuthRedirect)
+    window.addEventListener('clerk:signed-in', handleAuthRedirect)
+    
+    return () => {
+      window.removeEventListener('clerk:loaded', handleAuthRedirect)
+      window.removeEventListener('clerk:signed-in', handleAuthRedirect)
+    }
+  }, [isLoaded, isSignedIn])
+
+  // Add debugging
+  useEffect(() => {
+    console.log('🔍 Auth State:', { 
+      isLoaded, 
+      isSignedIn, 
+      userId: userId ? 'present' : 'none',
+      currentPath: window.location.pathname 
+    })
+  }, [isLoaded, isSignedIn, userId])
+
   if (!isLoaded) {
     return <LoadingSpinner />
+  }
+
+  // Show error if Clerk is not configured
+  if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-red-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600 mb-4">Configuration Error</h1>
+          <p className="text-red-500">Missing VITE_CLERK_PUBLISHABLE_KEY environment variable</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -50,11 +110,23 @@ function App() {
                 <div className="flex justify-center">
                   <SignInButton 
                     mode="modal"
-                    redirectUrl="/dashboard"
                     afterSignInUrl="/dashboard"
                     afterSignUpUrl="/dashboard"
+                    redirectUrl="/dashboard"
+                    signUpUrl="/sign-in"
                   >
-                    <button className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <button 
+                      className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      onClick={() => {
+                        // Add a custom redirect handler
+                        setTimeout(() => {
+                          if (window.Clerk?.user) {
+                            console.log('🔄 Manual redirect after auth')
+                            window.location.href = '/dashboard'
+                          }
+                        }, 2000)
+                      }}
+                    >
                       Sign In
                     </button>
                   </SignInButton>
