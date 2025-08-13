@@ -27,7 +27,7 @@ services:
   # Frontend Service  
   - type: web
     name: content-engine-frontend
-    runtime: node
+    runtime: static
     rootDir: Frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
@@ -35,6 +35,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-    # You'll need to update the backend URL after backend deployment
+    # Add these environment variables when deploying:
     # - key: VITE_API_URL
-    #   value: https://content-engine-backend.onrender.com
+    #   value: https://content-engine-backend.onrender.com/api
+    # - key: VITE_CLERK_PUBLISHABLE_KEY
+    #   value: your-clerk-publishable-key
