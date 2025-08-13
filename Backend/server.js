@@ -13,6 +13,7 @@ app.use(
   cors({
     origin: [
       "https://advance-blog-engine-automated.vercel.app",
+      "https://content-engine-frontend.onrender.com",
       "http://localhost:5173",
       "http://localhost:3000"
     ],

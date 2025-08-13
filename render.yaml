@@ -1,0 +1,40 @@
+services:
+  # Backend Service
+  - type: web
+    name: content-engine-backend
+    runtime: node
+    rootDir: Backend
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    # Add your environment variables here when deploying
+    # - key: MONGODB_URI
+    #   value: your-mongodb-connection-string
+    # - key: JWT_SECRET
+    #   value: your-jwt-secret
+    # - key: CLERK_SECRET_KEY
+    #   value: your-clerk-secret
+    # - key: ANTHROPIC_API_KEY
+    #   value: your-anthropic-api-key
+    # - key: GEMINI_API_KEY
+    #   value: your-gemini-api-key
+
+  # Frontend Service  
+  - type: web
+    name: content-engine-frontend
+    runtime: node
+    rootDir: Frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+    # You'll need to update the backend URL after backend deployment
+    # - key: VITE_API_URL
+    #   value: https://content-engine-backend.onrender.com
