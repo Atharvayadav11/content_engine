@@ -20,7 +20,15 @@ function ClerkProviderWithRouter({ children }) {
   return (
     <ClerkProvider 
       publishableKey={PUBLISHABLE_KEY}
-      navigate={navigate}
+      navigate={(to) => {
+        console.log('🔄 Clerk navigate called with:', to)
+        if (to === '/dashboard') {
+          // Force a full page reload to dashboard
+          window.location.href = '/dashboard'
+        } else {
+          navigate(to)
+        }
+      }}
       afterSignInUrl="/dashboard"
       afterSignUpUrl="/dashboard"
       signInUrl="/sign-in"

@@ -14,51 +14,15 @@ function App() {
   const { userId } = useAuth()
   const navigate = useNavigate()
 
-  // Handle authentication state changes with more aggressive redirect
+  // Simple redirect logic
   useEffect(() => {
-    if (isLoaded) {
-      const currentPath = window.location.pathname
-      
-      if (isSignedIn && (currentPath === '/sign-in' || currentPath === '/sign-up')) {
-        console.log('🔄 User authenticated, redirecting to dashboard from:', currentPath)
-        // Use setTimeout to ensure DOM is ready
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true })
-        }, 100)
-      }
-    }
-  }, [isLoaded, isSignedIn, navigate])
-
-  // Listen for userId changes (when user signs in)
-  useEffect(() => {
-    if (userId) {
+    if (isLoaded && isSignedIn) {
       const currentPath = window.location.pathname
       if (currentPath === '/sign-in' || currentPath === '/sign-up') {
-        console.log('🔄 UserId detected, redirecting to dashboard')
-        navigate('/dashboard', { replace: true })
+        console.log('🔄 Redirecting authenticated user to dashboard')
+        // Direct window location change
+        window.location.href = '/dashboard'
       }
-    }
-  }, [userId, navigate])
-
-  // Backup redirect using window location (more reliable after Clerk auth)
-  useEffect(() => {
-    const handleAuthRedirect = () => {
-      if (isLoaded && isSignedIn) {
-        const currentPath = window.location.pathname
-        if (currentPath === '/sign-in' || currentPath === '/sign-up') {
-          console.log('🔄 Backup redirect - using window.location')
-          window.location.href = '/dashboard'
-        }
-      }
-    }
-
-    // Listen for Clerk events
-    window.addEventListener('clerk:loaded', handleAuthRedirect)
-    window.addEventListener('clerk:signed-in', handleAuthRedirect)
-    
-    return () => {
-      window.removeEventListener('clerk:loaded', handleAuthRedirect)
-      window.removeEventListener('clerk:signed-in', handleAuthRedirect)
     }
   }, [isLoaded, isSignedIn])
 
@@ -108,25 +72,8 @@ function App() {
                   </p>
                 </div>
                 <div className="flex justify-center">
-                  <SignInButton 
-                    mode="modal"
-                    afterSignInUrl="/dashboard"
-                    afterSignUpUrl="/dashboard"
-                    redirectUrl="/dashboard"
-                    signUpUrl="/sign-in"
-                  >
-                    <button 
-                      className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      onClick={() => {
-                        // Add a custom redirect handler
-                        setTimeout(() => {
-                          if (window.Clerk?.user) {
-                            console.log('🔄 Manual redirect after auth')
-                            window.location.href = '/dashboard'
-                          }
-                        }, 2000)
-                      }}
-                    >
+                  <SignInButton>
+                    <button className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                       Sign In
                     </button>
                   </SignInButton>
