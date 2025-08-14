@@ -7,14 +7,27 @@ const CreditService = require("../services/creditService")
 const router = express.Router()
 
 // Create new blog
-router.post("/", auth, checkCredits('blog_creation', 1), async (req, res) => {
+router.post("/", auth, checkCredits("blog_creation", 1), async (req, res) => {
   try {
-    const { topicKeyword, urls } = req.body
+    const { topicKeyword, competitors, persona, additionalInfo, urls } = req.body
 
-    console.log("📝 Creating new blog:", { topicKeyword, urlsCount: urls?.length })
+    console.log("📝 Creating new blog:", {
+      topicKeyword,
+      competitorsCount: competitors?.length || 0,
+      hasPersona: !!persona,
+      hasAdditionalInfo: !!additionalInfo,
+      urlsCount: urls?.length || 0,
+    })
+
+    if (!competitors || !Array.isArray(competitors) || competitors.length === 0) {
+      return res.status(400).json({ message: "At least one competitor is required" })
+    }
 
     const blog = new Blog({
       topicKeyword,
+      competitors: competitors || [],
+      persona: persona || "",
+      additionalInfo: additionalInfo || "",
       urls: urls || [],
       createdBy: req.user._id,
     })
@@ -22,14 +35,10 @@ router.post("/", auth, checkCredits('blog_creation', 1), async (req, res) => {
     await blog.save()
 
     // Deduct credit after successful blog creation
-    await CreditService.deductCredits(
-      req.user._id, 
-      'blog_creation', 
-      1,
-      blog._id
-    )
+    await CreditService.deductCredits(req.user._id, "blog_creation", 1, blog._id)
 
     console.log("✅ Blog created successfully:", blog._id)
+    console.log("🏢 Competitors saved:", competitors)
 
     res.status(201).json({
       message: "Blog created successfully - 1 credit used",
@@ -58,6 +67,42 @@ router.get("/", auth, async (req, res) => {
   } catch (error) {
     console.error("❌ Get Blogs Error:", error)
     res.status(500).json({ message: "Error fetching blogs" })
+  }
+})
+
+// Get previous competitors
+router.get("/previous-competitors", auth, async (req, res) => {
+  try {
+    const blogs = await Blog.find({
+      createdBy: req.user._id,
+      competitors: { $exists: true, $not: { $size: 0 } },
+    })
+      .sort({ createdAt: -1 })
+      .select("competitors")
+      .limit(10) // Get last 10 blogs with competitors
+
+    // Extract unique competitors from all blogs
+    const allCompetitors = blogs.reduce((acc, blog) => {
+      if (blog.competitors && Array.isArray(blog.competitors)) {
+        acc.push(...blog.competitors)
+      }
+      return acc
+    }, [])
+
+    // Remove duplicates and filter out empty strings
+    const uniqueCompetitors = [...new Set(allCompetitors)]
+      .filter((competitor) => competitor && competitor.trim().length > 0)
+      .slice(0, 20) // Limit to 20 most recent unique competitors
+
+    console.log("🏢 Retrieved previous competitors:", uniqueCompetitors.length)
+
+    res.json({
+      competitors: uniqueCompetitors,
+      count: uniqueCompetitors.length,
+    })
+  } catch (error) {
+    console.error("❌ Get Previous Competitors Error:", error)
+    res.status(500).json({ message: "Error fetching previous competitors" })
   }
 })
 

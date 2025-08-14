@@ -7,6 +7,22 @@ const BlogSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    competitors: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    persona: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    additionalInfo: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     urls: [
       {
         title: String,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams } from "react-router-dom"
-import { useAuth } from '@clerk/clerk-react'
+import { useAuth } from "@clerk/clerk-react"
 import axios from "axios"
 import toast from "react-hot-toast"
 import { handleApiCall } from "../utils/apiClient"
@@ -31,7 +31,7 @@ const BlogDetails = () => {
   const [blog, setBlog] = useState(null)
   const [loading, setLoading] = useState(true)
   const [writerzenAuth, setWriterzenAuth] = useState(false)
-  const [writerzenLoggedIn, setWriterzenLoggedIn] = useState(false)
+  const [writerzenLoggedIn, setWriterzenLoggedIn] = useState(true)
   const [actionLoading, setActionLoading] = useState("")
   const [keywordSuggestions, setKeywordSuggestions] = useState([])
   const [keywordsToInclude, setKeywordsToInclude] = useState([])
@@ -39,11 +39,18 @@ const BlogDetails = () => {
   const [selectedIncludeKeywords, setSelectedIncludeKeywords] = useState([])
   const [showCredentialsModal, setShowCredentialsModal] = useState(false)
   const [writerzenAuthData, setWriterzenAuthData] = useState(null)
+  const [keywordsSaved, setKeywordsSaved] = useState(false)
 
   useEffect(() => {
     fetchBlog()
     checkWriterzenAuth()
   }, [id])
+
+  useEffect(() => {
+    if (blog?.relatedKeywords && blog.relatedKeywords.length > 0) {
+      setKeywordsSaved(true)
+    }
+  }, [blog])
 
   const fetchBlog = async () => {
     try {
@@ -51,13 +58,13 @@ const BlogDetails = () => {
         async () => {
           const token = await getToken()
           const response = await axios.get(`/blogs/${id}`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           })
           setBlog(response.data.blog)
           return response
         },
         "load blog",
-        getToken
+        getToken,
       )
     } catch (error) {
       // Error handling is done in handleApiCall
@@ -70,7 +77,7 @@ const BlogDetails = () => {
     try {
       const token = await getToken()
       const response = await axios.get("/writerzen/auth-status", {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
       setWriterzenAuth(response.data.isAuthenticated)
       setWriterzenAuthData(response.data.authData)
@@ -87,13 +94,13 @@ const BlogDetails = () => {
         async () => {
           const token = await getToken()
           const response = await axios.get("/ai/test-claude", {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           })
           toast.success("Claude AI connection successful!")
           return response
         },
         "test Claude AI connection",
-        getToken
+        getToken,
       )
     } catch (error) {
       // Error handling is done in handleApiCall
@@ -112,7 +119,7 @@ const BlogDetails = () => {
         async () => {
           const token = await getToken()
           const response = await axios[method](endpoint, credentials, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           })
           setWriterzenAuth(true)
           setWriterzenAuthData(response.data.authData)
@@ -121,7 +128,7 @@ const BlogDetails = () => {
           return response
         },
         "save WriterZen credentials",
-        getToken
+        getToken,
       )
     } catch (error) {
       console.error("❌ Save credentials error:", error)
@@ -157,7 +164,7 @@ const BlogDetails = () => {
         async () => {
           const token = await getToken()
           const response = await axios.delete("/writerzen/remove-credentials", {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           })
           setWriterzenAuth(false)
           setWriterzenAuthData(null)
@@ -170,7 +177,7 @@ const BlogDetails = () => {
           return response
         },
         "logout from WriterZen",
-        getToken
+        getToken,
       )
     } catch (error) {
       // Error handling is done in handleApiCall
@@ -187,15 +194,23 @@ const BlogDetails = () => {
       await handleApiCall(
         async () => {
           const token = await getToken()
-          const response = await axios.post("/ai/extract-toc", { urls }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          const response = await axios.post(
+            "/ai/extract-toc",
+            { urls },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
 
-          await axios.put(`/blogs/${id}`, {
-            tableOfContent: response.data.tableOfContent,
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          await axios.put(
+            `/blogs/${id}`,
+            {
+              tableOfContent: response.data.tableOfContent,
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
 
           setBlog((prev) => ({
             ...prev,
@@ -206,7 +221,7 @@ const BlogDetails = () => {
           return response
         },
         "extract table of contents",
-        getToken
+        getToken,
       )
     } catch (error) {
       // Error handling is done in handleApiCall
@@ -227,14 +242,14 @@ const BlogDetails = () => {
         async () => {
           const token = await getToken()
           const response = await axios.get(`/writerzen/keywords?input=${encodeURIComponent(blog.topicKeyword)}`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           })
           setKeywordSuggestions(response.data.data.keywords)
           toast.success(`Found ${response.data.data.keywords.length} keyword suggestions`)
           return response
         },
         "get keyword suggestions",
-        getToken
+        getToken,
       )
     } catch (error) {
       if (error.response?.data?.needsCredentialUpdate) {
@@ -262,21 +277,25 @@ const BlogDetails = () => {
     setActionLoading("include-keywords")
     try {
       console.log("🎯 Getting keywords to include for:", blog.topicKeyword)
-      
+
       await handleApiCall(
         async () => {
           const token = await getToken()
-          const response = await axios.post("/writerzen/keywords-to-include", {
-            keyword: blog.topicKeyword.trim()
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          const response = await axios.post(
+            "/writerzen/keywords-to-include",
+            {
+              keyword: blog.topicKeyword.trim(),
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
           setKeywordsToInclude(response.data.data.keywords)
           toast.success(`Found ${response.data.data.keywords.length} keywords to include`)
           return response
         },
         "get keywords to include",
-        getToken
+        getToken,
       )
     } catch (error) {
       console.error("❌ Keywords to include error details:", error.response?.data)
@@ -286,7 +305,7 @@ const BlogDetails = () => {
         setWriterzenLoggedIn(false)
         checkWriterzenAuth()
       } else if (error.response?.status === 400) {
-        toast.error(`Invalid request: ${error.response?.data?.message || 'Bad request'}`)
+        toast.error(`Invalid request: ${error.response?.data?.message || "Bad request"}`)
       }
     } finally {
       setActionLoading("")
@@ -299,15 +318,19 @@ const BlogDetails = () => {
       await handleApiCall(
         async () => {
           const token = await getToken()
-          const response = await axios.put(`/blogs/${id}`, {
-            relatedKeywords: selectedKeywords.map((k) => ({
-              keyword: k.keyword,
-              searchVolume: k.searchVolume,
-              selected: true,
-            })),
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          const response = await axios.put(
+            `/blogs/${id}`,
+            {
+              relatedKeywords: selectedKeywords.map((k) => ({
+                keyword: k.keyword,
+                searchVolume: k.searchVolume,
+                selected: true,
+              })),
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
 
           setBlog((prev) => ({
             ...prev,
@@ -318,11 +341,12 @@ const BlogDetails = () => {
             })),
           }))
 
+          setKeywordsSaved(true)
           toast.success("Related keywords saved!")
           return response
         },
         "save keywords",
-        getToken
+        getToken,
       )
     } catch (error) {
       // Error handling is done in handleApiCall
@@ -337,17 +361,21 @@ const BlogDetails = () => {
       await handleApiCall(
         async () => {
           const token = await getToken()
-          const response = await axios.put(`/blogs/${id}`, {
-            keywordsToInclude: selectedIncludeKeywords.map((k) => ({
-              text: k.text,
-              searchVolume: k.searchVolume,
-              repeat: k.repeat,
-              density: k.density,
-              selected: true,
-            })),
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          const response = await axios.put(
+            `/blogs/${id}`,
+            {
+              keywordsToInclude: selectedIncludeKeywords.map((k) => ({
+                text: k.text,
+                searchVolume: k.searchVolume,
+                repeat: k.repeat,
+                density: k.density,
+                selected: true,
+              })),
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
 
           setBlog((prev) => ({
             ...prev,
@@ -364,7 +392,7 @@ const BlogDetails = () => {
           return response
         },
         "save keywords to include",
-        getToken
+        getToken,
       )
     } catch (error) {
       // Error handling is done in handleApiCall
@@ -384,18 +412,26 @@ const BlogDetails = () => {
       await handleApiCall(
         async () => {
           const token = await getToken()
-          const response = await axios.post("/ai/generate-description", {
-            topicKeyword: blog.topicKeyword,
-            tableOfContent: blog.tableOfContent,
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          const response = await axios.post(
+            "/ai/generate-description",
+            {
+              topicKeyword: blog.topicKeyword,
+              tableOfContent: blog.tableOfContent,
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
 
-          await axios.put(`/blogs/${id}`, {
-            backgroundDescription: response.data.backgroundDescription,
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          await axios.put(
+            `/blogs/${id}`,
+            {
+              backgroundDescription: response.data.backgroundDescription,
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
 
           setBlog((prev) => ({
             ...prev,
@@ -406,7 +442,7 @@ const BlogDetails = () => {
           return response
         },
         "generate background description",
-        getToken
+        getToken,
       )
     } catch (error) {
       // Error handling is done in handleApiCall
@@ -467,7 +503,7 @@ const BlogDetails = () => {
           <p className="text-gray-600 mt-1">Blog automation workflow</p>
         </div>
         <div className="flex space-x-2">
-          <button
+          {/* <button
             onClick={testClaudeConnection}
             disabled={actionLoading === "test-claude"}
             className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 transition-colors"
@@ -478,9 +514,9 @@ const BlogDetails = () => {
               <TestTube size={20} className="mr-2" />
             )}
             Test Claude AI
-          </button>
+          </button> */}
 
-          {!writerzenLoggedIn ? (
+          {/* {!writerzenLoggedIn ? (
             <button
               onClick={() => setShowCredentialsModal(true)}
               disabled={actionLoading === "save-credentials" || actionLoading === "continue-existing"}
@@ -512,7 +548,7 @@ const BlogDetails = () => {
                 Logout
               </button>
             </div>
-          )}
+          )} */}
         </div>
       </div>
 
@@ -612,33 +648,79 @@ const BlogDetails = () => {
       {/* WriterZen Actions */}
       {writerzenLoggedIn && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">WriterZen Actions</h2>
-          <div className="flex space-x-4">
-            <button
-              onClick={getKeywordSuggestions}
-              disabled={actionLoading === "keywords"}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              {actionLoading === "keywords" ? (
-                <Loader2 size={20} className="mr-2 animate-spin" />
-              ) : (
-                <Search size={20} className="mr-2" />
-              )}
-              Find Keywords Suggestions
-            </button>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Salesso Keyword Assistant</h2>
+          <div className="space-y-4">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-600 rounded-full font-semibold text-sm">
+                1
+              </div>
+              <div className="flex-1">
+                <button
+                  onClick={getKeywordSuggestions}
+                  disabled={actionLoading === "keywords"}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {actionLoading === "keywords" ? (
+                    <Loader2 size={20} className="mr-2 animate-spin" />
+                  ) : (
+                    <Search size={20} className="mr-2" />
+                  )}
+                  Find Keywords Suggestions
+                </button>
+                {keywordsSaved && (
+                  <span className="ml-3 inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                    <CheckCircle size={12} className="mr-1" />
+                    Completed
+                  </span>
+                )}
+              </div>
+            </div>
 
-            <button
-              onClick={getKeywordsToInclude}
-              disabled={actionLoading === "include-keywords"}
-              className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-            >
-              {actionLoading === "include-keywords" ? (
-                <Loader2 size={20} className="mr-2 animate-spin" />
-              ) : (
-                <Target size={20} className="mr-2" />
-              )}
-              Find Keywords to Include
-            </button>
+            <div className="flex items-center space-x-4">
+              <div
+                className={`flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm ${
+                  keywordsSaved ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-400"
+                }`}
+              >
+                2
+              </div>
+              <div className="flex-1">
+                {keywordsSaved ? (
+                  <button
+                    onClick={getKeywordsToInclude}
+                    disabled={actionLoading === "include-keywords"}
+                    className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  >
+                    {actionLoading === "include-keywords" ? (
+                      <Loader2 size={20} className="mr-2 animate-spin" />
+                    ) : (
+                      <Target size={20} className="mr-2" />
+                    )}
+                    Find Keywords to Include
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center px-4 py-2 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed">
+                    <Target size={20} className="mr-2" />
+                    Find Keywords to Include
+                    <span className="ml-2 text-xs">(Complete step 1 first)</span>
+                  </div>
+                )}
+                {blog?.keywordsToInclude && blog.keywordsToInclude.length > 0 && (
+                  <span className="ml-3 inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                    <CheckCircle size={12} className="mr-1" />
+                    Completed
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {!keywordsSaved && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  <strong>Step 1:</strong> First, find and save keyword suggestions to unlock the next step.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -922,16 +1004,9 @@ const BlogDetails = () => {
                 <button
                   onClick={() =>
                     copyToClipboard(
-                      [
-                        "growmeorganic.com",
-                        "uplead.com",
-                        "apollo.io",
-                        "zoominfo.com",
-                        "saleshandy.com",
-                        "snov.io",
-                        "woodpecker.co",
-                        "wiza.co",
-                      ].join(", "),
+                      blog.competitors && blog.competitors.length > 0
+                        ? blog.competitors.join(", ")
+                        : "No competitors specified",
                       "Direct Competitors",
                     )
                   }
@@ -942,20 +1017,17 @@ const BlogDetails = () => {
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {[
-                  "growmeorganic.com",
-                  "uplead.com",
-                  "apollo.io",
-                  "zoominfo.com",
-                  "saleshandy.com",
-                  "snov.io",
-                  "woodpecker.co",
-                  "wiza.co",
-                ].map((competitor, index) => (
-                  <span key={index} className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
-                    {competitor}
+                {blog.competitors && blog.competitors.length > 0 ? (
+                  blog.competitors.map((competitor, index) => (
+                    <span key={index} className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
+                      {competitor}
+                    </span>
+                  ))
+                ) : (
+                  <span className="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-sm italic">
+                    No competitors specified
                   </span>
-                ))}
+                )}
               </div>
             </div>
           </div>
