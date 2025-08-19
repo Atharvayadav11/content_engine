@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import axios from "axios"
-import { ArrowLeft, Calendar, User, Tag, CheckCircle, Clock, RefreshCw, Copy, Check } from "lucide-react"
+import { ArrowLeft, Calendar, User, Tag, CheckCircle, Clock, RefreshCw, Copy, Check, Upload, Mail, FileText } from "lucide-react"
 import LoadingSpinner from "../components/LoadingSpinner"
 
 const AdminBlogView = () => {
@@ -13,6 +13,9 @@ const AdminBlogView = () => {
   const [loading, setLoading] = useState(true)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [copiedFields, setCopiedFields] = useState({})
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [uploadLoading, setUploadLoading] = useState(false)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
 
   useEffect(() => {
     fetchBlog()
@@ -105,6 +108,65 @@ const AdminBlogView = () => {
     } catch (err) {
       console.error("Failed to copy text: ", err)
     }
+  }
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files[0]
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        alert('Please select a PDF file only.')
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        alert('File size must be less than 10MB.')
+        return
+      }
+      setSelectedFile(file)
+      setUploadSuccess(false)
+    }
+  }
+
+  const handleSendPDF = async () => {
+    if (!selectedFile) {
+      alert('Please select a PDF file first.')
+      return
+    }
+
+    setUploadLoading(true)
+    try {
+      const token = localStorage.getItem("adminToken")
+      const formData = new FormData()
+      formData.append('pdf', selectedFile)
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/admin/send-blog-pdf/${id}`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      )
+
+      if (response.data.success) {
+        setUploadSuccess(true)
+        setSelectedFile(null)
+        // Update blog status in local state
+        setBlog(prev => ({ ...prev, status: 'completed' }))
+        alert(`PDF sent successfully to ${blog.userEmail}!`)
+      }
+    } catch (error) {
+      console.error('Failed to send PDF:', error)
+      alert(error.response?.data?.message || 'Failed to send PDF. Please try again.')
+    } finally {
+      setUploadLoading(false)
+    }
+  }
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null)
+    setUploadSuccess(false)
   }
 
   const FieldWithCopy = ({ title, content, fieldName, children }) => {
@@ -232,6 +294,96 @@ const AdminBlogView = () => {
               <span>ID: {blog._id}</span>
             </div>
           </div>
+        </div>
+
+        {/* PDF Upload Section */}
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg shadow-sm border border-green-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <Mail size={24} className="text-green-600 mr-3" />
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Send Completed Blog</h2>
+                <p className="text-sm text-gray-600">Upload PDF and send to user via email</p>
+              </div>
+            </div>
+            <div className="text-sm text-gray-500">
+              📧 {blog.userEmail}
+            </div>
+          </div>
+
+          <div className="border-2 border-dashed border-green-300 rounded-lg p-6 bg-white">
+            {!selectedFile ? (
+              <div className="text-center">
+                <Upload size={48} className="mx-auto text-gray-400 mb-4" />
+                <div className="mb-4">
+                  <label
+                    htmlFor="pdf-upload"
+                    className="cursor-pointer inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                  >
+                    <FileText size={20} className="mr-2" />
+                    Choose PDF File
+                  </label>
+                  <input
+                    id="pdf-upload"
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </div>
+                <p className="text-sm text-gray-500">
+                  Upload a PDF file (max 10MB) to send to the user
+                </p>
+              </div>
+            ) : (
+              <div className="text-center">
+                <FileText size={48} className="mx-auto text-green-600 mb-4" />
+                <div className="mb-4">
+                  <p className="text-lg font-medium text-gray-900 mb-2">{selectedFile.name}</p>
+                  <p className="text-sm text-gray-500">
+                    Size: {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                  </p>
+                </div>
+                <div className="flex items-center justify-center space-x-4">
+                  <button
+                    onClick={handleSendPDF}
+                    disabled={uploadLoading}
+                    className="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {uploadLoading ? (
+                      <>
+                        <RefreshCw size={20} className="mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={20} className="mr-2" />
+                        Send to {blog.userEmail}
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={clearSelectedFile}
+                    disabled={uploadLoading}
+                    className="inline-flex items-center px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {uploadSuccess && (
+            <div className="mt-4 p-4 bg-green-100 border border-green-400 rounded-md">
+              <div className="flex items-center">
+                <CheckCircle size={20} className="text-green-600 mr-2" />
+                <p className="text-green-800 font-medium">
+                  PDF sent successfully to {blog.userEmail}!
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Blog Content */}
