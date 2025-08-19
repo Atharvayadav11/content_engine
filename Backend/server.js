@@ -16,7 +16,7 @@ app.use(
       "https://advance-blog-engine-automated.vercel.app",
       "https://content-engine-frontend.onrender.com",
       "http://localhost:5173",
-      "http://localhost:3000"
+      "http://localhost:3000",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -53,6 +53,8 @@ app.use("/api/scraper", require("./routes/scraper"))
 app.use("/api/blogs", require("./routes/blogs"))
 app.use("/api/writerzen", require("./routes/writerzen"))
 app.use("/api/ai", require("./routes/ai"))
+app.use("/api/admin", require("./routes/admin"))
+app.use("/api/admin-auth", require("./routes/adminAuth"))
 
 // Health check
 app.get("/api/health", (req, res) => {

@@ -64,8 +64,19 @@ const BlogSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "processing", "completed"],
+      enum: ["draft", "processing", "pending", "completed"],
       default: "draft",
+    },
+    finalBlogRequested: {
+      type: Boolean,
+      default: false,
+    },
+    finalBlogRequestedAt: {
+      type: Date,
+    },
+    content: {
+      type: String,
+      default: "",
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

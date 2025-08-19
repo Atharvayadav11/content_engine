@@ -10,24 +10,21 @@ import {
   FileText,
   Search,
   Target,
-  LogIn,
-  LogOut,
   Loader2,
   Save,
-  Eye,
   ExternalLink,
   Sparkles,
-  TestTube,
   AlertTriangle,
   CheckCircle,
   Copy,
+  Send,
 } from "lucide-react"
 import LoadingSpinner from "../components/LoadingSpinner"
 import WriterZenCredentialsModal from "../components/WriterZenCredentialsModal"
 
 const BlogDetails = () => {
   const { id } = useParams()
-  const { getToken } = useAuth()
+  const { getToken, user } = useAuth()
   const [blog, setBlog] = useState(null)
   const [loading, setLoading] = useState(true)
   const [writerzenAuth, setWriterzenAuth] = useState(false)
@@ -40,6 +37,8 @@ const BlogDetails = () => {
   const [showCredentialsModal, setShowCredentialsModal] = useState(false)
   const [writerzenAuthData, setWriterzenAuthData] = useState(null)
   const [keywordsSaved, setKeywordsSaved] = useState(false)
+  const [isSubmittingFinalBlog, setIsSubmittingFinalBlog] = useState(false)
+  const [finalBlogSubmitted, setFinalBlogSubmitted] = useState(false)
 
   useEffect(() => {
     fetchBlog()
@@ -483,6 +482,39 @@ const BlogDetails = () => {
     }
   }
 
+  const handleCreateFinalBlog = async () => {
+    setIsSubmittingFinalBlog(true)
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/final-blog-requests`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          blogId: id,
+          userEmail: user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress,
+          topicKeyword: blog.topicKeyword,
+        }),
+      })
+
+      if (response.ok) {
+        setFinalBlogSubmitted(true)
+        setTimeout(() => {
+          setFinalBlogSubmitted(false)
+        }, 5000)
+      } else {
+        console.error("Failed to submit final blog request")
+        toast.error("Failed to submit final blog request. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error submitting final blog request:", error)
+      toast.error("Network error. Please check your connection and try again.")
+    } finally {
+      setIsSubmittingFinalBlog(false)
+    }
+  }
+
   if (loading) {
     return <LoadingSpinner />
   }
@@ -514,9 +546,9 @@ const BlogDetails = () => {
               <TestTube size={20} className="mr-2" />
             )}
             Test Claude AI
-          </button> */}
+          </button>
 
-          {/* {!writerzenLoggedIn ? (
+          {!writerzenLoggedIn ? (
             <button
               onClick={() => setShowCredentialsModal(true)}
               disabled={actionLoading === "save-credentials" || actionLoading === "continue-existing"}
@@ -648,7 +680,7 @@ const BlogDetails = () => {
       {/* WriterZen Actions */}
       {writerzenLoggedIn && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Salesso Keyword Assistant</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">WriterZen Actions</h2>
           <div className="space-y-4">
             <div className="flex items-center space-x-4">
               <div className="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-600 rounded-full font-semibold text-sm">
@@ -838,10 +870,30 @@ const BlogDetails = () => {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-gray-900">Final Blog Page</h2>
-            <button className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors">
-              <Eye size={20} className="mr-2" />
-              Show Blog Page
-            </button>
+            {finalBlogSubmitted ? (
+              <div className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-md">
+                <CheckCircle size={20} className="mr-2" />
+                Your blog will be sent to your email within an hour
+              </div>
+            ) : (
+              <button
+                onClick={handleCreateFinalBlog}
+                disabled={isSubmittingFinalBlog}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmittingFinalBlog ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} className="mr-2" />
+                    Create Final Blog
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <div className="space-y-6">
