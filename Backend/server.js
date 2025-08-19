@@ -63,6 +63,7 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
     claudeConfigured: !!process.env.ANTHROPIC_API_KEY,
     mongoConnected: mongoose.connection.readyState === 1,
+    emailConfigured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD),
   })
 })
 

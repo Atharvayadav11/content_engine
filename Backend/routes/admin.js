@@ -1,8 +1,25 @@
 const express = require("express")
+const multer = require("multer")
 const router = express.Router()
 const Blog = require("../models/Blog")
 const User = require("../models/User")
 const adminAuth = require("../middleware/adminAuth")
+const emailService = require("../services/emailService")
+
+// Configure multer for PDF upload (memory storage since we won't save the file)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true)
+    } else {
+      cb(new Error('Only PDF files are allowed!'), false)
+    }
+  }
+})
 
 // Get all blogs for admin dashboard with user email
 router.get("/blogs", adminAuth, async (req, res) => {
@@ -182,6 +199,127 @@ router.post("/final-blog-requests", adminAuth, async (req, res) => {
       success: false,
       message: "Failed to process final blog request",
       error: error.message,
+    })
+  }
+})
+
+// Send blog PDF via email
+router.post("/send-blog-pdf/:blogId", adminAuth, upload.single('pdf'), async (req, res) => {
+  try {
+    const { blogId } = req.params
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "PDF file is required"
+      })
+    }
+
+    // Get blog details
+    const blog = await Blog.findById(blogId).populate("createdBy", "email")
+    
+    if (!blog) {
+      return res.status(404).json({
+        success: false,
+        message: "Blog not found"
+      })
+    }
+
+    if (!blog.createdBy || !blog.createdBy.email) {
+      return res.status(400).json({
+        success: false,
+        message: "Blog creator email not found"
+      })
+    }
+
+    console.log('📧 Preparing to send PDF for blog:', {
+      blogId: blog._id,
+      topicKeyword: blog.topicKeyword,
+      userEmail: blog.createdBy.email,
+      fileName: req.file.originalname,
+      fileSize: req.file.size
+    })
+
+    // Send email with PDF attachment
+    const emailResult = await emailService.sendBlogPDF(
+      blog.createdBy.email,
+      blog.topicKeyword,
+      req.file.buffer,
+      req.file.originalname || `${blog.topicKeyword.replace(/\s+/g, '_')}_Blog.pdf`
+    )
+
+    // Update blog status to completed
+    blog.status = "completed"
+    blog.finalBlogRequested = true
+    blog.finalBlogRequestedAt = new Date()
+    await blog.save()
+
+    console.log('✅ Blog PDF sent successfully to:', blog.createdBy.email)
+
+    res.json({
+      success: true,
+      message: `Blog PDF sent successfully to ${blog.createdBy.email}`,
+      emailResult: {
+        messageId: emailResult.messageId,
+        recipient: emailResult.recipient
+      },
+      blog: {
+        ...blog.toObject(),
+        userEmail: blog.createdBy.email
+      }
+    })
+
+  } catch (error) {
+    console.error('❌ Send blog PDF error:', error)
+    
+    // Handle specific multer errors
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: "File size too large. Maximum 10MB allowed."
+      })
+    }
+    
+    if (error.message === 'Only PDF files are allowed!') {
+      return res.status(400).json({
+        success: false,
+        message: "Only PDF files are allowed."
+      })
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to send blog PDF",
+      error: error.message
+    })
+  }
+})
+
+// Test email configuration
+router.post("/test-email", adminAuth, async (req, res) => {
+  try {
+    const { testEmail } = req.body
+    
+    if (!testEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Test email address is required"
+      })
+    }
+
+    const result = await emailService.sendTestEmail(testEmail)
+    
+    res.json({
+      success: true,
+      message: `Test email sent successfully to ${testEmail}`,
+      messageId: result.messageId
+    })
+  } catch (error) {
+    console.error('❌ Test email error:', error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to send test email",
+      error: error.message
     })
   }
 })

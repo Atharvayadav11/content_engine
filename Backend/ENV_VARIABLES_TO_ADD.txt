@@ -1,0 +1,18 @@
+# Email Configuration for Blog PDF Delivery
+# Add these to your .env file:
+
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASSWORD=your-gmail-app-password
+
+# Instructions to set up Gmail App Password:
+# 1. Go to your Google Account settings
+# 2. Enable 2-Factor Authentication if not already enabled
+# 3. Go to Security > App passwords
+# 4. Generate a new app password for "Mail"
+# 5. Use that 16-character password here (not your regular Gmail password)
+
+# Example:
+# EMAIL_USER=yourblog@gmail.com
+# EMAIL_PASSWORD=abcd efgh ijkl mnop
+
+# Note: Make sure to use App Password, not your regular Gmail password!
