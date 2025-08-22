@@ -176,4 +176,55 @@ router.delete("/:id", auth, async (req, res) => {
   }
 })
 
+// Request final blog processing
+router.post("/:id/request-final", auth, async (req, res) => {
+  try {
+    const { userEmail, topicKeyword } = req.body
+    const blogId = req.params.id
+
+    // Verify blog belongs to user
+    const blog = await Blog.findOne({
+      _id: blogId,
+      createdBy: req.user._id,
+    })
+
+    if (!blog) {
+      return res.status(404).json({
+        success: false,
+        message: "Blog not found",
+      })
+    }
+
+    // Update blog status to indicate it's been requested for final processing
+    blog.status = "pending"
+    blog.finalBlogRequested = true
+    blog.finalBlogRequestedAt = new Date()
+    await blog.save()
+
+    console.log("📧 Final blog request received:", {
+      blogId,
+      userEmail,
+      topicKeyword,
+      userId: req.user._id,
+      requestedAt: new Date().toISOString(),
+    })
+
+    res.json({
+      success: true,
+      message: "Final blog request submitted successfully",
+      blog: {
+        ...blog.toObject(),
+        userEmail: userEmail,
+      },
+    })
+  } catch (error) {
+    console.error("❌ Final blog request error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to process final blog request",
+      error: error.message,
+    })
+  }
+})
+
 module.exports = router

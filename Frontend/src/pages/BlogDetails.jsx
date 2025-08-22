@@ -6,21 +6,8 @@ import { useAuth } from "@clerk/clerk-react"
 import axios from "axios"
 import toast from "react-hot-toast"
 import { handleApiCall } from "../utils/apiClient"
-import {
-  FileText,
-  Search,
-  Target,
-  Loader2,
-  Save,
-  ExternalLink,
-  Sparkles,
-  AlertTriangle,
-  CheckCircle,
-  Copy,
-  Send,
-} from "lucide-react"
+import { FileText, Search, Target, Loader2, ExternalLink, Sparkles, CheckCircle, Copy } from "lucide-react"
 import LoadingSpinner from "../components/LoadingSpinner"
-import WriterZenCredentialsModal from "../components/WriterZenCredentialsModal"
 
 const BlogDetails = () => {
   const { id } = useParams()
@@ -37,8 +24,10 @@ const BlogDetails = () => {
   const [showCredentialsModal, setShowCredentialsModal] = useState(false)
   const [writerzenAuthData, setWriterzenAuthData] = useState(null)
   const [keywordsSaved, setKeywordsSaved] = useState(false)
+  const [includeKeywordsSaved, setIncludeKeywordsSaved] = useState(false)
   const [isSubmittingFinalBlog, setIsSubmittingFinalBlog] = useState(false)
   const [finalBlogSubmitted, setFinalBlogSubmitted] = useState(false)
+  const [bgDescriptionAttempts, setBgDescriptionAttempts] = useState(0)
 
   useEffect(() => {
     fetchBlog()
@@ -49,7 +38,21 @@ const BlogDetails = () => {
     if (blog?.relatedKeywords && blog.relatedKeywords.length > 0) {
       setKeywordsSaved(true)
     }
+    if (blog?.keywordsToInclude && blog.keywordsToInclude.length > 0) {
+      setIncludeKeywordsSaved(true)
+    }
   }, [blog])
+
+  useEffect(() => {
+    if (blog?.tableOfContent && !blog?.backgroundDescription && bgDescriptionAttempts === 0) {
+      setTimeout(() => {
+        if (blog?.tableOfContent && !blog?.backgroundDescription) {
+          setBgDescriptionAttempts(1)
+          generateBackgroundDescription()
+        }
+      }, 1000)
+    }
+  }, [blog?.tableOfContent, blog?.backgroundDescription, bgDescriptionAttempts])
 
   const fetchBlog = async () => {
     try {
@@ -124,7 +127,7 @@ const BlogDetails = () => {
           setWriterzenAuthData(response.data.authData)
           setWriterzenLoggedIn(true)
           toast.success("WriterZen credentials saved and logged in successfully!")
-          return response
+          //console.log("✅ Logged in with existing WriterZen credentials")
         },
         "save WriterZen credentials",
         getToken,
@@ -217,6 +220,11 @@ const BlogDetails = () => {
           }))
 
           toast.success("Table of Contents extracted using Claude AI!")
+
+          if (response.data.tableOfContent) {
+            generateBackgroundDescription()
+          }
+
           return response
         },
         "extract table of contents",
@@ -226,6 +234,123 @@ const BlogDetails = () => {
       // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
+    }
+  }
+
+  const generateBackgroundDescription = async () => {
+    if (!blog?.tableOfContent) {
+      return
+    }
+
+    setActionLoading("description")
+    try {
+      await handleApiCall(
+        async () => {
+          const token = await getToken()
+          const response = await axios.post(
+            "/ai/generate-description",
+            {
+              topicKeyword: blog.topicKeyword,
+              tableOfContent: blog.tableOfContent,
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
+
+          await axios.put(
+            `/blogs/${id}`,
+            {
+              backgroundDescription: response.data.backgroundDescription,
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          )
+
+          setBlog((prev) => ({
+            ...prev,
+            backgroundDescription: response.data.backgroundDescription,
+          }))
+
+          toast.success("Background description generated using Claude AI!")
+          return response
+        },
+        "generate background description",
+        getToken,
+      )
+    } catch (error) {
+      console.error("Background description generation failed:", error)
+    } finally {
+      setActionLoading("")
+    }
+  }
+
+  const handleKeywordSelection = (keyword) => {
+    setSelectedKeywords((prev) => {
+      const isSelected = prev.some((k) => k.keyword === keyword.keyword)
+      if (isSelected) {
+        return prev.filter((k) => k.keyword !== keyword.keyword)
+      } else {
+        return [...prev, keyword]
+      }
+    })
+  }
+
+  const handleIncludeKeywordSelection = (keyword) => {
+    setSelectedIncludeKeywords((prev) => {
+      const isSelected = prev.some((k) => k.text === keyword.text)
+      if (isSelected) {
+        return prev.filter((k) => k.text !== keyword.text)
+      } else {
+        return [...prev, keyword]
+      }
+    })
+  }
+
+  const copyToClipboard = async (text, label) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success(`${label} copied to clipboard!`)
+    } catch (error) {
+      console.error("Failed to copy:", error)
+      toast.error("Failed to copy to clipboard")
+    }
+  }
+
+  const handleCreateFinalBlog = async () => {
+    if (!window.confirm("Your blog will be sent to your email after an hour. Do you want to proceed?")) {
+      return
+    }
+
+    setIsSubmittingFinalBlog(true)
+    try {
+      const token = await getToken()
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/blogs/${id}/request-final`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          userEmail: user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress,
+          topicKeyword: blog.topicKeyword,
+        }),
+      })
+
+      if (response.ok) {
+        setFinalBlogSubmitted(true)
+        toast.success("Final blog request submitted! You will receive your blog via email within an hour.")
+      } else {
+        const errorData = await response.json()
+        console.error("Failed to submit final blog request:", errorData)
+        toast.error(errorData.message || "Failed to submit final blog request. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error submitting final blog request:", error)
+      toast.error("Network error. Please check your connection and try again.")
+    } finally {
+      setIsSubmittingFinalBlog(false)
     }
   }
 
@@ -387,6 +512,7 @@ const BlogDetails = () => {
             })),
           }))
 
+          setIncludeKeywordsSaved(true)
           toast.success("Keywords to include saved!")
           return response
         },
@@ -397,121 +523,6 @@ const BlogDetails = () => {
       // Error handling is done in handleApiCall
     } finally {
       setActionLoading("")
-    }
-  }
-
-  const generateBackgroundDescription = async () => {
-    if (!blog.tableOfContent) {
-      toast.error("Please extract Table of Contents first")
-      return
-    }
-
-    setActionLoading("description")
-    try {
-      await handleApiCall(
-        async () => {
-          const token = await getToken()
-          const response = await axios.post(
-            "/ai/generate-description",
-            {
-              topicKeyword: blog.topicKeyword,
-              tableOfContent: blog.tableOfContent,
-            },
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            },
-          )
-
-          await axios.put(
-            `/blogs/${id}`,
-            {
-              backgroundDescription: response.data.backgroundDescription,
-            },
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            },
-          )
-
-          setBlog((prev) => ({
-            ...prev,
-            backgroundDescription: response.data.backgroundDescription,
-          }))
-
-          toast.success("Background description generated using Claude AI!")
-          return response
-        },
-        "generate background description",
-        getToken,
-      )
-    } catch (error) {
-      // Error handling is done in handleApiCall
-    } finally {
-      setActionLoading("")
-    }
-  }
-
-  const handleKeywordSelection = (keyword) => {
-    setSelectedKeywords((prev) => {
-      const isSelected = prev.some((k) => k.keyword === keyword.keyword)
-      if (isSelected) {
-        return prev.filter((k) => k.keyword !== keyword.keyword)
-      } else {
-        return [...prev, keyword]
-      }
-    })
-  }
-
-  const handleIncludeKeywordSelection = (keyword) => {
-    setSelectedIncludeKeywords((prev) => {
-      const isSelected = prev.some((k) => k.text === keyword.text)
-      if (isSelected) {
-        return prev.filter((k) => k.text !== keyword.text)
-      } else {
-        return [...prev, keyword]
-      }
-    })
-  }
-
-  const copyToClipboard = async (text, label) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast.success(`${label} copied to clipboard!`)
-    } catch (error) {
-      console.error("Failed to copy:", error)
-      toast.error("Failed to copy to clipboard")
-    }
-  }
-
-  const handleCreateFinalBlog = async () => {
-    setIsSubmittingFinalBlog(true)
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/final-blog-requests`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          blogId: id,
-          userEmail: user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress,
-          topicKeyword: blog.topicKeyword,
-        }),
-      })
-
-      if (response.ok) {
-        setFinalBlogSubmitted(true)
-        setTimeout(() => {
-          setFinalBlogSubmitted(false)
-        }, 5000)
-      } else {
-        console.error("Failed to submit final blog request")
-        toast.error("Failed to submit final blog request. Please try again.")
-      }
-    } catch (error) {
-      console.error("Error submitting final blog request:", error)
-      toast.error("Network error. Please check your connection and try again.")
-    } finally {
-      setIsSubmittingFinalBlog(false)
     }
   }
 
@@ -529,73 +540,12 @@ const BlogDetails = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">{blog.topicKeyword}</h1>
           <p className="text-gray-600 mt-1">Blog automation workflow</p>
         </div>
-        <div className="flex space-x-2">
-          {/* <button
-            onClick={testClaudeConnection}
-            disabled={actionLoading === "test-claude"}
-            className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 transition-colors"
-          >
-            {actionLoading === "test-claude" ? (
-              <Loader2 size={20} className="mr-2 animate-spin" />
-            ) : (
-              <TestTube size={20} className="mr-2" />
-            )}
-            Test Claude AI
-          </button>
-
-          {!writerzenLoggedIn ? (
-            <button
-              onClick={() => setShowCredentialsModal(true)}
-              disabled={actionLoading === "save-credentials" || actionLoading === "continue-existing"}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              {actionLoading === "save-credentials" || actionLoading === "continue-existing" ? (
-                <Loader2 size={20} className="mr-2 animate-spin" />
-              ) : (
-                <LogIn size={20} className="mr-2" />
-              )}
-              Login to WriterZen
-            </button>
-          ) : (
-            <div className="flex items-center space-x-2">
-              <div className="flex items-center px-3 py-2 bg-green-100 text-green-800 rounded-md text-sm">
-                <CheckCircle size={16} className="mr-2" />
-                WriterZen Connected
-              </div>
-              <button
-                onClick={handleWriterzenLogout}
-                disabled={actionLoading === "logout"}
-                className="inline-flex items-center px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors text-sm"
-              >
-                {actionLoading === "logout" ? (
-                  <Loader2 size={16} className="mr-2 animate-spin" />
-                ) : (
-                  <LogOut size={16} className="mr-2" />
-                )}
-                Logout
-              </button>
-            </div>
-          )} */}
-        </div>
       </div>
-
-      {/* WriterZen Status Warning */}
-      {writerzenAuthData && !writerzenLoggedIn && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <AlertTriangle className="text-yellow-600 mr-3" size={20} />
-            <div className="text-sm text-yellow-800">
-              <p className="font-medium">WriterZen credentials may be expired</p>
-              <p>Please login again to continue using WriterZen features.</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Selected URLs */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -654,7 +604,7 @@ const BlogDetails = () => {
             <button
               onClick={generateBackgroundDescription}
               disabled={actionLoading === "description"}
-              className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {actionLoading === "description" ? (
                 <Loader2 size={20} className="mr-2 animate-spin" />
@@ -677,222 +627,185 @@ const BlogDetails = () => {
         </div>
       )}
 
-      {/* WriterZen Actions */}
-      {writerzenLoggedIn && (
+      {/* WriterZen Actions Section */}
+      {blog.tableOfContent && blog.backgroundDescription && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">WriterZen Actions</h2>
-          <div className="space-y-4">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-600 rounded-full font-semibold text-sm">
-                1
-              </div>
-              <div className="flex-1">
-                <button
-                  onClick={getKeywordSuggestions}
-                  disabled={actionLoading === "keywords"}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {actionLoading === "keywords" ? (
-                    <Loader2 size={20} className="mr-2 animate-spin" />
-                  ) : (
-                    <Search size={20} className="mr-2" />
-                  )}
-                  Find Keywords Suggestions
-                </button>
-                {keywordsSaved && (
-                  <span className="ml-3 inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                    <CheckCircle size={12} className="mr-1" />
-                    Completed
-                  </span>
-                )}
-              </div>
-            </div>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">WriterZen Actions</h2>
+          </div>
 
-            <div className="flex items-center space-x-4">
-              <div
-                className={`flex items-center justify-center w-8 h-8 rounded-full font-semibold text-sm ${
-                  keywordsSaved ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-400"
-                }`}
-              >
-                2
-              </div>
-              <div className="flex-1">
-                {keywordsSaved ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              onClick={getKeywordSuggestions}
+              disabled={actionLoading === "keywords"}
+              className="inline-flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {actionLoading === "keywords" ? (
+                <Loader2 size={20} className="mr-2 animate-spin" />
+              ) : (
+                <Search size={20} className="mr-2" />
+              )}
+              Get Keyword Suggestions
+            </button>
+
+            <button
+              onClick={getKeywordsToInclude}
+              disabled={actionLoading === "include-keywords" || !keywordsSaved}
+              className={`inline-flex items-center justify-center px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                keywordsSaved
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              {actionLoading === "include-keywords" ? (
+                <Loader2 size={20} className="mr-2 animate-spin" />
+              ) : (
+                <Target size={20} className="mr-2" />
+              )}
+              Find Keywords to Include
+              {!keywordsSaved && <span className="ml-2 text-xs">(Save keywords first)</span>}
+            </button>
+          </div>
+
+          {/* Keyword Suggestions Results */}
+          {keywordSuggestions.length > 0 && (
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-medium text-gray-900">Keyword Suggestions ({keywordSuggestions.length})</h3>
+                {selectedKeywords.length > 0 && !keywordsSaved && (
                   <button
-                    onClick={getKeywordsToInclude}
-                    disabled={actionLoading === "include-keywords"}
-                    className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    onClick={saveSelectedKeywords}
+                    disabled={actionLoading === "save-keywords"}
+                    className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 text-sm"
                   >
-                    {actionLoading === "include-keywords" ? (
-                      <Loader2 size={20} className="mr-2 animate-spin" />
-                    ) : (
-                      <Target size={20} className="mr-2" />
-                    )}
-                    Find Keywords to Include
+                    {actionLoading === "save-keywords" ? <Loader2 size={16} className="mr-1 animate-spin" /> : null}
+                    Save Selected ({selectedKeywords.length})
                   </button>
-                ) : (
-                  <div className="inline-flex items-center px-4 py-2 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed">
-                    <Target size={20} className="mr-2" />
-                    Find Keywords to Include
-                    <span className="ml-2 text-xs">(Complete step 1 first)</span>
+                )}
+                {keywordsSaved && (
+                  <div className="flex items-center text-green-600 text-sm">
+                    <CheckCircle size={16} className="mr-1" />
+                    Keywords Saved
                   </div>
                 )}
-                {blog?.keywordsToInclude && blog.keywordsToInclude.length > 0 && (
-                  <span className="ml-3 inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                    <CheckCircle size={12} className="mr-1" />
-                    Completed
-                  </span>
-                )}
               </div>
-            </div>
-
-            {!keywordsSaved && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm text-blue-800">
-                  <strong>Step 1:</strong> First, find and save keyword suggestions to unlock the next step.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Keyword Suggestions */}
-      {keywordSuggestions.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Keyword Suggestions ({keywordSuggestions.length})</h2>
-            <div className="text-sm text-gray-600">Selected: {selectedKeywords.length}</div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 max-h-64 overflow-y-auto">
-            {keywordSuggestions.map((keyword, index) => (
-              <div
-                key={index}
-                className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                  selectedKeywords.some((k) => k.keyword === keyword.keyword)
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-                onClick={() => handleKeywordSelection(keyword)}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">{keyword.keyword}</p>
-                    <p className="text-sm text-gray-600">Volume: {keyword.searchVolume?.toLocaleString()}</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {keywordSuggestions.map((keyword, index) => (
+                  <div
+                    key={index}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedKeywords.some((k) => k.keyword === keyword.keyword)
+                        ? "border-purple-500 bg-purple-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                    onClick={() => !keywordsSaved && handleKeywordSelection(keyword)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-gray-900">{keyword.keyword}</span>
+                        <div className="text-sm text-gray-500">
+                          Search Volume: {keyword.searchVolume?.toLocaleString() || "N/A"} | Competition:{" "}
+                          {keyword.competition || "N/A"}
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedKeywords.some((k) => k.keyword === keyword.keyword)}
+                        onChange={() => !keywordsSaved && handleKeywordSelection(keyword)}
+                        disabled={keywordsSaved}
+                        className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded disabled:opacity-50"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={selectedKeywords.some((k) => k.keyword === keyword.keyword)}
-                    onChange={() => handleKeywordSelection(keyword)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-
-          {selectedKeywords.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <button
-                onClick={saveSelectedKeywords}
-                disabled={actionLoading === "save-keywords"}
-                className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors"
-              >
-                {actionLoading === "save-keywords" ? (
-                  <Loader2 size={20} className="mr-2 animate-spin" />
-                ) : (
-                  <Save size={20} className="mr-2" />
-                )}
-                Save Selected Keywords
-              </button>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Keywords to Include */}
-      {keywordsToInclude.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Keywords to Include ({keywordsToInclude.length})</h2>
-            <div className="text-sm text-gray-600">Selected: {selectedIncludeKeywords.length}</div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 max-h-64 overflow-y-auto">
-            {keywordsToInclude.map((keyword, index) => (
-              <div
-                key={index}
-                className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                  selectedIncludeKeywords.some((k) => k.text === keyword.text)
-                    ? "border-indigo-500 bg-indigo-50"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-                onClick={() => handleIncludeKeywordSelection(keyword)}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">{keyword.text}</p>
-                    <p className="text-sm text-gray-600">Volume: {keyword.searchVolume?.toLocaleString()}</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={selectedIncludeKeywords.some((k) => k.text === keyword.text)}
-                    onChange={() => handleIncludeKeywordSelection(keyword)}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {selectedIncludeKeywords.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <button
-                onClick={saveSelectedIncludeKeywords}
-                disabled={actionLoading === "save-include-keywords"}
-                className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {actionLoading === "save-include-keywords" ? (
-                  <Loader2 size={20} className="mr-2 animate-spin" />
-                ) : (
-                  <Save size={20} className="mr-2" />
+          {/* Keywords to Include Results */}
+          {keywordsToInclude.length > 0 && (
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-medium text-gray-900">Keywords to Include ({keywordsToInclude.length})</h3>
+                {selectedIncludeKeywords.length > 0 && !includeKeywordsSaved && (
+                  <button
+                    onClick={saveSelectedIncludeKeywords}
+                    disabled={actionLoading === "save-include-keywords"}
+                    className="inline-flex items-center px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 text-sm"
+                  >
+                    {actionLoading === "save-include-keywords" ? (
+                      <Loader2 size={16} className="mr-1 animate-spin" />
+                    ) : null}
+                    Save Selected ({selectedIncludeKeywords.length})
+                  </button>
                 )}
-                Save Selected Keywords
-              </button>
+                {includeKeywordsSaved && (
+                  <div className="flex items-center text-green-600 text-sm">
+                    <CheckCircle size={16} className="mr-1" />
+                    Keywords Saved
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {keywordsToInclude.map((keyword, index) => (
+                  <div
+                    key={index}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedIncludeKeywords.some((k) => k.text === keyword.text)
+                        ? "border-indigo-500 bg-indigo-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                    onClick={() => !includeKeywordsSaved && handleIncludeKeywordSelection(keyword)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-gray-900">{keyword.text}</span>
+                        <div className="text-sm text-gray-500">
+                          Search Volume: {keyword.searchVolume?.toLocaleString() || "N/A"}
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedIncludeKeywords.some((k) => k.text === keyword.text)}
+                        onChange={() => !includeKeywordsSaved && handleIncludeKeywordSelection(keyword)}
+                        disabled={includeKeywordsSaved}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
       )}
 
       {/* Final Blog Page */}
-      {blog.tableOfContent && blog.backgroundDescription && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Final Blog Page</h2>
-            {finalBlogSubmitted ? (
-              <div className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-md">
-                <CheckCircle size={20} className="mr-2" />
-                Your blog will be sent to your email within an hour
-              </div>
-            ) : (
+      {keywordsSaved && includeKeywordsSaved && (
+        <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-800">Final Blog Page</h2>
+              <p className="text-gray-600 mt-1">Ready to create your final blog</p>
+            </div>
+            {!finalBlogSubmitted ? (
               <button
                 onClick={handleCreateFinalBlog}
                 disabled={isSubmittingFinalBlog}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-medium"
               >
                 {isSubmittingFinalBlog ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Submitting...
-                  </>
+                  <Loader2 size={16} className="mr-1 animate-spin" />
                 ) : (
-                  <>
-                    <Send size={20} className="mr-2" />
-                    Create Final Blog
-                  </>
+                  <CheckCircle size={16} className="mr-1" />
                 )}
+                Create Final Blog
               </button>
+            ) : (
+              <div className="inline-flex items-center px-3 py-2 bg-green-100 text-green-800 rounded-md text-sm">
+                <CheckCircle size={16} className="mr-1" />
+                Blog request submitted
+              </div>
             )}
           </div>
 
@@ -1086,13 +999,7 @@ const BlogDetails = () => {
         </div>
       )}
 
-      <WriterZenCredentialsModal
-        isOpen={showCredentialsModal}
-        onClose={() => setShowCredentialsModal(false)}
-        onSave={handleSaveCredentials}
-        onContinue={handleContinueWithExisting}
-        existingData={writerzenAuthData}
-      />
+      {/* Removed WriterZenCredentialsModal component */}
     </div>
   )
 }

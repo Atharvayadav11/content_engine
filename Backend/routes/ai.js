@@ -68,6 +68,18 @@ async function cleanOutlineWithAI(rawOutline, url) {
 -Remove any thing which is not related to blog and related to advertise and website related things
 - Output MUST start with ###OUTLINE_START### and end with ###OUTLINE_END###
 
+You are an expert content strategist. I will provide you with a raw, scraped Table of Contents (TOC) from a blog. 
+The scraped TOC may be incomplete, very short, or poorly structured.
+
+Your tasks:
+1. check if TOC content is not such good grade if it look irrelevant or low grade then suggest by yourself.
+2. Expand the TOC into a comprehensive, well-structured outline. 
+3. Add missing but relevant sections/subsections that would make the blog more complete and valuable for readers. 
+4. Use professional, reader-friendly, and SEO-optimized headings. 
+5. Ensure the flow is logical (intro → core topics → advanced insights → conclusion). but dont show word conclusion and advance insight
+6. Output only the improved TOC.
+7. remove this type of words Pricing & Plans,Integrations,FAQ,Free Trial remove irrelevat things only contain toc.
+
 URL: ${url}
 
 Raw Scraped Outline:
@@ -100,7 +112,7 @@ Please provide a clean, structured table of contents:`
 async function getOutlineFromAI(urls) {
   console.log("🔵 Attempting Claude AI direct extraction...")
   
-  const prompt = `I have ${urls.length} blog post URLs.Please use the web_fetch tool to access the URL Your task is to extract the Table of Contents (TOC) from the first URL that contains it in a clearly structured way.
+  const prompt = `I have ${urls.length} blog post URLs.Please use the web_fetch tool to access the URL you can do it, Your task is to extract the Table of Contents (TOC) from the first URL that contains it in a clearly structured way.
 
 Check each URL in the given order: 1st, then 2nd, then 3rd.
 If you find a clear TOC in the first URL, return it and stop, without checking the others and in result only provide TOC and url from which you have extracted dont provide unnecessory message only TOC.
