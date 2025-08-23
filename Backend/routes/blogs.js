@@ -3,6 +3,7 @@ const Blog = require("../models/Blog")
 const auth = require("../middleware/auth")
 const checkCredits = require("../middleware/credits")
 const CreditService = require("../services/creditService")
+const emailService = require("../services/emailService")
 
 const router = express.Router()
 
@@ -39,6 +40,42 @@ router.post("/", auth, checkCredits("blog_creation", 1), async (req, res) => {
 
     console.log("✅ Blog created successfully:", blog._id)
     console.log("🏢 Competitors saved:", competitors)
+
+    // Send confirmation emails (non-blocking)
+    try {
+      // Send confirmation email to user
+      const userConfirmationPromise = emailService.sendBlogSubmissionConfirmation(
+        req.user.email,
+        req.user.username,
+        topicKeyword
+      )
+
+      // Send notification email to admin
+      const adminNotificationPromise = emailService.sendAdminNewRequestNotification(
+        req.user.email,
+        req.user.username,
+        topicKeyword,
+        blog._id,
+        competitors,
+        persona,
+        additionalInfo
+      )
+
+      // Execute both emails in parallel without blocking the response
+      Promise.all([userConfirmationPromise, adminNotificationPromise])
+        .then(([userResult, adminResult]) => {
+          console.log("✅ User confirmation email sent:", userResult.messageId)
+          console.log("✅ Admin notification email sent:", adminResult.messageId)
+        })
+        .catch((emailError) => {
+          console.error("❌ Email sending failed:", emailError)
+          // Don't fail the blog creation if emails fail
+        })
+
+    } catch (emailError) {
+      console.error("❌ Email initialization failed:", emailError)
+      // Continue with successful blog creation response
+    }
 
     res.status(201).json({
       message: "Blog created successfully - 1 credit used",

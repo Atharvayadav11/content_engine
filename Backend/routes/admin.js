@@ -295,6 +295,192 @@ router.post("/send-blog-pdf/:blogId", adminAuth, upload.single('pdf'), async (re
   }
 })
 
+// Search users by email
+router.get("/users/search", adminAuth, async (req, res) => {
+  try {
+    const { email } = req.query
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email query parameter is required"
+      })
+    }
+
+    // Search for users by email (case-insensitive, partial match)
+    const users = await User.find({
+      email: { $regex: email, $options: 'i' }
+    }).select('clerkId username email credits totalCreditsUsed createdAt').limit(10)
+
+    res.json({
+      success: true,
+      users,
+      count: users.length
+    })
+  } catch (error) {
+    console.error('❌ User search error:', error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to search users",
+      error: error.message
+    })
+  }
+})
+
+// Get all users with pagination
+router.get("/users", adminAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 20
+    const skip = (page - 1) * limit
+
+    const users = await User.find()
+      .select('clerkId username email credits totalCreditsUsed createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+
+    const totalUsers = await User.countDocuments()
+    const totalPages = Math.ceil(totalUsers / limit)
+
+    res.json({
+      success: true,
+      users,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalUsers,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    })
+  } catch (error) {
+    console.error('❌ Get users error:', error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+      error: error.message
+    })
+  }
+})
+
+// Update user credits
+router.put("/users/:userId/credits", adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.params
+    const { credits, action, reason } = req.body
+
+    // Validate input
+    if (typeof credits !== 'number' || credits < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Credits must be a non-negative number"
+      })
+    }
+
+    if (!['set', 'add', 'subtract'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Action must be 'set', 'add', or 'subtract'"
+      })
+    }
+
+    // Find user
+    const user = await User.findById(userId)
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      })
+    }
+
+    const oldCredits = user.credits
+    let newCredits = oldCredits
+
+    // Calculate new credits based on action
+    switch (action) {
+      case 'set':
+        newCredits = credits
+        break
+      case 'add':
+        newCredits = oldCredits + credits
+        break
+      case 'subtract':
+        newCredits = Math.max(0, oldCredits - credits) // Don't allow negative credits
+        break
+    }
+
+    // Update user credits
+    user.credits = newCredits
+    await user.save()
+
+    // Log the credit change
+    const creditDifference = newCredits - oldCredits
+    if (creditDifference !== 0) {
+      const operation = creditDifference > 0 ? 'admin_credit_addition' : 'admin_credit_deduction'
+      await CreditService.addCredits(
+        userId, 
+        operation, 
+        Math.abs(creditDifference), 
+        reason || `Admin ${action}: ${credits} credits`
+      )
+    }
+
+    console.log(`✅ Admin updated credits for ${user.email}: ${oldCredits} → ${newCredits}`)
+
+    res.json({
+      success: true,
+      message: `Credits updated successfully for ${user.email}`,
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        oldCredits,
+        newCredits,
+        difference: creditDifference
+      }
+    })
+  } catch (error) {
+    console.error('❌ Update credits error:', error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to update credits",
+      error: error.message
+    })
+  }
+})
+
+// Get user details with transaction history
+router.get("/users/:userId", adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.params
+
+    const user = await User.findById(userId).select('-__v')
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      })
+    }
+
+    // Get user's recent transactions
+    const transactions = await CreditService.getUserTransactions(userId, 20)
+
+    res.json({
+      success: true,
+      user,
+      transactions
+    })
+  } catch (error) {
+    console.error('❌ Get user details error:', error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch user details",
+      error: error.message
+    })
+  }
+})
+
 // Test email configuration
 router.post("/test-email", adminAuth, async (req, res) => {
   try {

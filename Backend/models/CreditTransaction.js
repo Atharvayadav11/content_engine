@@ -8,7 +8,7 @@ const CreditTransactionSchema = new mongoose.Schema({
   },
   operation: {
     type: String,
-    enum: ["blog_creation", "toc_extraction", "keyword_research", "description_generation", "keywords_to_include"],
+    enum: ["blog_creation", "toc_extraction", "keyword_research", "description_generation", "keywords_to_include", "admin_credit_addition", "admin_credit_deduction"],
     required: true,
   },
   creditsUsed: {
