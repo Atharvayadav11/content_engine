@@ -189,7 +189,7 @@ class EmailService {
     try {
       console.log('📧 Sending new request notification to admin')
 
-      const adminEmail = 'atharvayadav11@gmail.com'
+      const adminEmail = 'navinkumargurnani@gmail.com'
       
       const mailOptions = {
         from: {
